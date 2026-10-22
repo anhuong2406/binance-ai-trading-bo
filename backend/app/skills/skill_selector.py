@@ -134,6 +134,22 @@ class SkillSelector:
                 f"Trạng thái: {mr.get('mean_reversion_signal')}."
             )
 
+        if "multi_timeframe_alignment" in quant_results:
+            mtf = quant_results["multi_timeframe_alignment"]
+            htf = mtf.get("htf_trend", {})
+            ltf = mtf.get("ltf_trend", {})
+            htf_state = "TĂNG (BULLISH)" if htf.get("bullish") else ("GIẢM (BEARISH)" if htf.get("bearish") else "ĐI NGANG (SIDEWAYS)")
+            ltf_state = "TĂNG (BULLISH)" if ltf.get("bullish") else ("GIẢM (BEARISH)" if ltf.get("bearish") else "ĐI NGANG (SIDEWAYS)")
+            guidelines.append(
+                f"[MULTI-TIMEFRAME CONFIRMATION (1H vs 15M)]:\n"
+                f"  - Khung lớn 1H (HTF): {htf_state} | EMA9={htf.get('ema9')} | RSI={htf.get('rsi')} | ADX={htf.get('adx')}\n"
+                f"  - Khung ngắn 15M (LTF): {ltf_state} | EMA9={ltf.get('ema9')} | RSI={ltf.get('rsi')} | ADX={ltf.get('adx')}\n"
+                f"  - Trạng thái liên khung: {mtf.get('alignment')} (Sức mạnh đồng thuận: {mtf.get('alignment_strength')}/100)\n"
+                f"  - Đánh giá MTF: {mtf.get('note')}\n"
+                f"  - QUY TẮC BẮT BUỘC: CHỈ đề xuất BUY khi allow_buy = True (Cả 1H và 15M đồng thuận TĂNG). "
+                f"Tuyệt đối KHÔNG BUY nếu khung 1H đang GIẢM để tránh bắt dao rơi!"
+            )
+
         guidelines.append(
             "YÊU CẦU CHIẾN LƯỢC: Nếu Regime là RANGING_HIGH_VOL (Q4 Choppy Chaos) hoặc Choppiness Index > 61.8, "
             "bắt buộc ưu tiên đề xuất HOLD để tránh bị quét stop loss trong vùng giật hỗn loạn."
@@ -164,6 +180,16 @@ class SkillSelector:
             guidelines.append(
                 f"[REGIME VETO]: Nếu Gemini đề xuất BUY nhưng thị trường đang ở {reg['regime']} ({reg['quadrant']}) "
                 f"hoặc OBI < -0.2 (áp lực bán đè nặng sổ lệnh), bạn có toàn quyền VETO / REJECT hoặc hạ về HOLD."
+            )
+
+        if "multi_timeframe_alignment" in quant_results:
+            mtf = quant_results["multi_timeframe_alignment"]
+            guidelines.append(
+                f"[MULTI-TIMEFRAME RISK VETO (1H vs 15M)]:\n"
+                f"  - Trạng thái liên khung: {mtf.get('alignment')} (allow_buy = {mtf.get('allow_buy')})\n"
+                f"  - Đánh giá: {mtf.get('note')}\n"
+                f"  - QUY TẮC THẨM ĐỊNH: Nếu Gemini đề xuất BUY nhưng allow_buy = False hoặc khung lớn 1H đang là DOWNTREND/BEARISH, "
+                f"bạn BẮT BUỘC PHẢI REJECT hoặc yêu cầu HOLD để bảo vệ vốn khỏi xu hướng giảm lớn."
             )
 
         guidelines.append(

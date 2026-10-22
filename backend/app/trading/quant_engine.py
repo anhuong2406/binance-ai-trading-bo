@@ -279,6 +279,130 @@ class QuantEngine:
     MIN_CANDLES_REQUIRED = 50  # Or 200 for full EMA 200
 
     @classmethod
+    def compute_mtf_alignment(
+        cls,
+        htf_highs: List[float],
+        htf_lows: List[float],
+        htf_closes: List[float],
+        htf_volumes: List[float],
+        ltf_highs: List[float],
+        ltf_lows: List[float],
+        ltf_closes: List[float],
+        ltf_volumes: List[float],
+    ) -> Dict[str, Any]:
+        """
+        Multi-Timeframe Alignment Analysis.
+        HTF = Higher Timeframe (1h), LTF = Lower Timeframe (15m).
+
+        Returns alignment score and directional bias for BUY/SELL filter.
+        Rules:
+          - ALIGNED_BULLISH : HTF bullish + LTF bullish → Allow BUY
+          - ALIGNED_BEARISH : HTF bearish + LTF bearish → Allow SELL (or avoid BUY)
+          - DIVERGING       : HTF ≠ LTF → Conflict zone, quality of signal degraded significantly
+        """
+        htf = cls._compute_trend_bias(htf_highs, htf_lows, htf_closes, htf_volumes)
+        ltf = cls._compute_trend_bias(ltf_highs, ltf_lows, ltf_closes, ltf_volumes)
+
+        htf_bull = htf["bullish"]
+        ltf_bull = ltf["bullish"]
+        htf_bear = htf["bearish"]
+        ltf_bear = ltf["bearish"]
+
+        # Alignment logic
+        if htf_bull and ltf_bull:
+            alignment = "ALIGNED_BULLISH"
+            bias = "BUY"
+            alignment_strength = round((htf["strength"] + ltf["strength"]) / 2, 1)
+            allow_buy = True
+            note = "HTF và LTF đều TĂNG — Tín hiệu BUY được xác nhận liên khung."
+        elif htf_bear and ltf_bear:
+            alignment = "ALIGNED_BEARISH"
+            bias = "SELL"
+            alignment_strength = round((htf["strength"] + ltf["strength"]) / 2, 1)
+            allow_buy = False
+            note = "HTF và LTF đều GIẢM — Tránh BUY, chờ đảo chiều."
+        elif htf_bull and not ltf_bull:
+            alignment = "HTF_BULL_LTF_PULLBACK"
+            bias = "WAIT"
+            alignment_strength = round(htf["strength"] * 0.6, 1)
+            allow_buy = False
+            note = "HTF tăng nhưng LTF đang điều chỉnh — Chờ LTF xác nhận tăng trở lại."
+        elif htf_bear and ltf_bull:
+            alignment = "COUNTER_TREND"
+            bias = "HOLD"
+            alignment_strength = round(ltf["strength"] * 0.4, 1)
+            allow_buy = False
+            note = "LTF đang phản ứng tăng ngắn hạn nhưng HTF vẫn GIẢM — Rủi ro cao, không BUY."
+        else:
+            alignment = "NEUTRAL"
+            bias = "HOLD"
+            alignment_strength = 30.0
+            allow_buy = False
+            note = "Không có xu hướng rõ ràng trên cả hai khung thời gian."
+
+        return {
+            "alignment": alignment,
+            "bias": bias,
+            "allow_buy": allow_buy,
+            "alignment_strength": alignment_strength,
+            "htf_trend": htf,
+            "ltf_trend": ltf,
+            "note": note
+        }
+
+    @classmethod
+    def _compute_trend_bias(
+        cls,
+        highs: List[float],
+        lows: List[float],
+        closes: List[float],
+        volumes: List[float],
+    ) -> Dict[str, Any]:
+        """Helper: determine trend direction for a given timeframe."""
+        if len(closes) < 30:
+            return {"bullish": False, "bearish": False, "strength": 0.0, "ema9": None, "ema21": None, "ema50": None, "rsi": None, "adx": None}
+
+        ema9  = calculate_ema(closes, 9)[-1]
+        ema21 = calculate_ema(closes, 21)[-1]
+        ema50 = calculate_ema(closes, 50)[-1]
+        rsi   = calculate_rsi(closes, 14)[-1]
+        adx_d = calculate_adx(highs, lows, closes, 14)
+        adx   = adx_d["adx"][-1] or 0.0
+        pdi   = adx_d["plus_di"][-1] or 0.0
+        mdi   = adx_d["minus_di"][-1] or 0.0
+
+        close  = closes[-1]
+        bullish = bool(ema9 and ema21 and ema50 and ema9 > ema21 and ema21 > ema50 and close > ema9)
+        bearish = bool(ema9 and ema21 and ema50 and ema9 < ema21 and ema21 < ema50 and close < ema9)
+
+        # Strength score (0-100) based on ADX + RSI positioning
+        strength = 0.0
+        if adx > 25:
+            strength += min(adx, 50)  # ADX contribution up to 50
+        if bullish and rsi and 40 < rsi < 70:
+            strength += 30.0
+        elif bearish and rsi and 30 < rsi < 60:
+            strength += 30.0
+        if pdi > mdi and bullish:
+            strength += 20.0
+        elif mdi > pdi and bearish:
+            strength += 20.0
+
+        return {
+            "bullish": bullish,
+            "bearish": bearish,
+            "strength": round(min(strength, 100.0), 1),
+            "ema9": ema9,
+            "ema21": ema21,
+            "ema50": ema50,
+            "rsi": rsi,
+            "adx": adx,
+            "plus_di": pdi,
+            "minus_di": mdi,
+            "close": close
+        }
+
+    @classmethod
     def compute_all_indicators(
         cls,
         highs: List[float],

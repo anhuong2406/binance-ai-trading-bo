@@ -59,3 +59,34 @@ def test_strategy_plugins_evaluation():
         res = s.evaluate("BTCUSDT", closes, highs, lows, volumes, ind)
         assert res.action in ("BUY", "SELL", "HOLD")
         assert res.strategy_name == s.name
+
+def test_quant_engine_mtf_alignment():
+    """Verify Multi-Timeframe Alignment correctly distinguishes aligned vs diverging trends."""
+    n = 60
+    # Bullish series
+    bull_closes = [100.0 + i * 1.0 for i in range(n)]
+    bull_highs = [c + 1.0 for c in bull_closes]
+    bull_lows = [c - 1.0 for c in bull_closes]
+    bull_vols = [1000.0] * n
+
+    # Bearish series
+    bear_closes = [200.0 - i * 1.0 for i in range(n)]
+    bear_highs = [c + 1.0 for c in bear_closes]
+    bear_lows = [c - 1.0 for c in bear_closes]
+    bear_vols = [1000.0] * n
+
+    # Both Bullish -> ALIGNED_BULLISH
+    res_bull = QuantEngine.compute_mtf_alignment(
+        htf_highs=bull_highs, htf_lows=bull_lows, htf_closes=bull_closes, htf_volumes=bull_vols,
+        ltf_highs=bull_highs, ltf_lows=bull_lows, ltf_closes=bull_closes, ltf_volumes=bull_vols
+    )
+    assert res_bull["alignment"] == "ALIGNED_BULLISH"
+    assert res_bull["allow_buy"] is True
+
+    # HTF Bearish + LTF Bullish -> COUNTER_TREND (Must NOT allow buy)
+    res_counter = QuantEngine.compute_mtf_alignment(
+        htf_highs=bear_highs, htf_lows=bear_lows, htf_closes=bear_closes, htf_volumes=bear_vols,
+        ltf_highs=bull_highs, ltf_lows=bull_lows, ltf_closes=bull_closes, ltf_volumes=bull_vols
+    )
+    assert res_counter["allow_buy"] is False
+    assert res_counter["alignment"] == "COUNTER_TREND"

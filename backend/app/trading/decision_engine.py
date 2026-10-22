@@ -1,6 +1,6 @@
 """
 Decision Engine - Multi-Agent Trading Pipeline Orchestrator
-Coordinates: Market Data -> Quant Engine -> Gemini Analyst -> GPT-6 Luna Reviewer
+Coordinates: Market Data -> Quant Engine -> MTF Alignment -> Gemini Analyst -> GPT-6 Luna Reviewer
 -> Consensus -> Risk Engine -> Execution / Simulator
 """
 import time
@@ -24,6 +24,10 @@ from app.database.models import AIAnalysisLog, RiskEvaluation
 from app.database.session import record_audit
 from app.config.settings import settings
 from app.skills import skill_selector, skill_audit
+
+# HTF (Higher Timeframe) for multi-timeframe confirmation
+HTF_TIMEFRAME = "1h"
+HTF_CANDLE_LIMIT = 60  # 60 x 1h = 60 hours of context
 
 class DecisionEngine:
     def __init__(self, binance_client: BinanceSpotClient):
@@ -54,15 +58,21 @@ class DecisionEngine:
             "steps": {}
         }
 
-        # Step 1: Market Data
+        # Step 1: Market Data (15m + 1h for Multi-Timeframe)
         try:
             candles = await self.market_data.get_validated_candles(symbol, interval=timeframe, limit=100)
+            # Fetch Higher Timeframe candles (1h) concurrently for MTF alignment
+            try:
+                candles_1h = await self.market_data.get_validated_candles(symbol, interval="1h", limit=60)
+            except Exception:
+                candles_1h = []
             snapshot = await self.market_data.get_market_snapshot(symbol)
             pipeline_log["steps"]["market_data"] = {
                 "status": "PASS",
                 "last_price": snapshot["lastPrice"],
                 "spread_percent": snapshot["spreadPercent"],
-                "candles_count": len(candles)
+                "candles_count": len(candles),
+                "candles_1h_count": len(candles_1h)
             }
         except Exception as e:
             pipeline_log["steps"]["market_data"] = {"status": "FAIL", "error": str(e)}
@@ -83,6 +93,51 @@ class DecisionEngine:
             pipeline_log["steps"]["quant_engine"] = {"status": "FAIL", "error": str(e)}
             return {"status": "ABORTED", "reason": f"Lỗi Quant Engine: {str(e)}", "pipeline": pipeline_log}
 
+        # Step 2.5: Multi-Timeframe Alignment (1h vs 15m)
+        mtf_alignment: Dict[str, Any] = {}
+        try:
+            if candles_1h and len(candles_1h) >= 30:
+                h_closes = [c.close for c in candles_1h]
+                h_highs  = [c.high  for c in candles_1h]
+                h_lows   = [c.low   for c in candles_1h]
+                h_vols   = [c.volume for c in candles_1h]
+                mtf_alignment = QuantEngine.compute_mtf_alignment(
+                    htf_highs=h_highs, htf_lows=h_lows, htf_closes=h_closes, htf_volumes=h_vols,
+                    ltf_highs=highs,   ltf_lows=lows,   ltf_closes=closes,   ltf_volumes=volumes
+                )
+                pipeline_log["steps"]["mtf_alignment"] = {
+                    "status": "PASS",
+                    "alignment": mtf_alignment["alignment"],
+                    "bias": mtf_alignment["bias"],
+                    "allow_buy": mtf_alignment["allow_buy"],
+                    "alignment_strength": mtf_alignment["alignment_strength"],
+                    "note": mtf_alignment["note"],
+                    "htf_1h": {
+                        "bullish": mtf_alignment["htf_trend"]["bullish"],
+                        "bearish": mtf_alignment["htf_trend"]["bearish"],
+                        "ema9":    round(mtf_alignment["htf_trend"]["ema9"] or 0, 6),
+                        "ema21":   round(mtf_alignment["htf_trend"]["ema21"] or 0, 6),
+                        "ema50":   round(mtf_alignment["htf_trend"]["ema50"] or 0, 6),
+                        "rsi":     round(mtf_alignment["htf_trend"]["rsi"] or 0, 1),
+                        "adx":     round(mtf_alignment["htf_trend"]["adx"] or 0, 1),
+                    },
+                    "ltf_15m": {
+                        "bullish": mtf_alignment["ltf_trend"]["bullish"],
+                        "bearish": mtf_alignment["ltf_trend"]["bearish"],
+                        "ema9":    round(mtf_alignment["ltf_trend"]["ema9"] or 0, 6),
+                        "ema21":   round(mtf_alignment["ltf_trend"]["ema21"] or 0, 6),
+                        "ema50":   round(mtf_alignment["ltf_trend"]["ema50"] or 0, 6),
+                        "rsi":     round(mtf_alignment["ltf_trend"]["rsi"] or 0, 1),
+                        "adx":     round(mtf_alignment["ltf_trend"]["adx"] or 0, 1),
+                    }
+                }
+            else:
+                mtf_alignment = {"alignment": "UNKNOWN", "bias": "HOLD", "allow_buy": False, "note": "Không đủ nến 1h để tính MTF."}
+                pipeline_log["steps"]["mtf_alignment"] = {"status": "SKIP", "note": "Không đủ dữ liệu 1h"}
+        except Exception as e:
+            mtf_alignment = {"alignment": "ERROR", "bias": "HOLD", "allow_buy": False, "note": str(e)}
+            pipeline_log["steps"]["mtf_alignment"] = {"status": "WARN", "error": str(e)}
+
         # Format recent candles summary for AI prompt
         recent_summary = [
             {"time": c.open_time, "o": c.open, "h": c.high, "l": c.low, "c": c.close, "v": c.volume}
@@ -102,6 +157,9 @@ class DecisionEngine:
             order_book=order_book_data,
             allocated_capital=settings.BOT_ALLOCATED_CAPITAL_USDT
         )
+        if mtf_alignment and mtf_alignment.get("alignment") != "UNKNOWN":
+            quant_skills["multi_timeframe_alignment"] = mtf_alignment
+
         gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
         gpt_skills_prompt = skill_selector.get_gpt_skills_prompt(quant_skills)
         skill_audit.set_last_cycle_skills(list(quant_skills.keys()))
@@ -154,6 +212,16 @@ class DecisionEngine:
 
         # Step 5: Decision Consensus
         consensus = DecisionConsensus.evaluate_consensus(symbol, gemini_out, gpt_out)
+
+        # Multi-Timeframe Hard Safety Guard
+        if consensus.approved and consensus.action == "BUY" and mtf_alignment.get("allow_buy") is False:
+            consensus.approved = False
+            consensus.action = "HOLD"
+            consensus.reason = (
+                f"Multi-Timeframe Veto: Khung 1h đang {mtf_alignment.get('alignment', 'COUNTER_TREND')} "
+                f"({mtf_alignment.get('note', '')}). Tự động khóa lệnh BUY ngược xu hướng lớn để bảo vệ vốn."
+            )
+
         pipeline_log["steps"]["consensus"] = {
             "status": "PASS" if consensus.approved else "DISAGREED",
             "action": consensus.action,

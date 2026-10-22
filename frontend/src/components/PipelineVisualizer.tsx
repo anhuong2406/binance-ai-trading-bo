@@ -150,6 +150,26 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
           );
         })}
       </div>
+
+      {/* Multi-Timeframe Alignment Indicator */}
+      {steps.mtf_alignment && steps.mtf_alignment.alignment && (
+        <div className="mt-3 p-2.5 rounded-lg bg-bg-darkest border border-bg-border flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase font-bold text-gray-400">Multi-Timeframe (1H & 15M):</span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+              steps.mtf_alignment.allow_buy
+                ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'
+                : 'bg-amber-950/60 text-amber-300 border border-amber-600/40'
+            }`}>
+              {steps.mtf_alignment.alignment}
+            </span>
+            <span className="text-gray-300 text-[11px]">{steps.mtf_alignment.note}</span>
+          </div>
+          <span className="text-gray-400 text-[11px] self-end sm:self-auto">
+            Đồng thuận: <strong className="text-gray-200">{steps.mtf_alignment.alignment_strength}/100</strong>
+          </span>
+        </div>
+      )}
     </div>
   );
 };
