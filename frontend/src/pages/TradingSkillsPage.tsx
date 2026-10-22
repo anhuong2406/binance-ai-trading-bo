@@ -138,13 +138,26 @@ export const TradingSkillsPage: React.FC = () => {
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-bloomberg-orange' : ''}`} />
               <span>Làm mới</span>
             </button>
+            <select
+              value={testSymbol}
+              onChange={(e) => {
+                setTestSymbol(e.target.value);
+                handleRunQuantTest(e.target.value);
+              }}
+              className="bg-bg-darker border border-bg-border rounded-lg px-2.5 py-2 text-xs font-mono text-gray-200 focus:outline-none focus:border-bloomberg-orange cursor-pointer"
+            >
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+              <option value="SOLUSDT">SOLUSDT</option>
+              <option value="DOGEUSDT">DOGEUSDT</option>
+            </select>
             <button
               onClick={() => handleRunQuantTest(testSymbol)}
               disabled={testingQuant}
               className="px-4 py-2 rounded-lg bg-bloomberg-orange text-black font-mono text-xs font-bold hover:bg-amber-400 shadow-md flex items-center gap-1.5 transition disabled:opacity-50"
             >
               <Zap className={`w-3.5 h-3.5 fill-current ${testingQuant ? 'animate-bounce' : ''}`} />
-              <span>{testingQuant ? 'Đang tính toán...' : `Test Quant (${testSymbol})`}</span>
+              <span>{testingQuant ? 'Đang tính toán...' : `Test Quant`}</span>
             </button>
           </div>
         </div>

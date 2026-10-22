@@ -91,6 +91,7 @@ export const BacktestPage: React.FC = () => {
               <option value="BTCUSDT">BTCUSDT</option>
               <option value="ETHUSDT">ETHUSDT</option>
               <option value="SOLUSDT">SOLUSDT</option>
+              <option value="DOGEUSDT">DOGEUSDT</option>
             </select>
           </div>
 

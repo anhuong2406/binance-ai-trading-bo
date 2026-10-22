@@ -24,7 +24,7 @@ export const TradingPage: React.FC<TradingPageProps> = ({ positions, onClosePosi
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const pairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+  const pairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT'];
   const intervals = ['5m', '15m', '1h', '4h'];
 
   const loadData = async () => {

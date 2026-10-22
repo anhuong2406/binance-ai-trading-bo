@@ -90,6 +90,7 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
             <option value="BTCUSDT">BTCUSDT</option>
             <option value="ETHUSDT">ETHUSDT</option>
             <option value="SOLUSDT">SOLUSDT</option>
+            <option value="DOGEUSDT">DOGEUSDT</option>
           </select>
 
           <button

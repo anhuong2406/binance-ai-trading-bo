@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Trading Mode: "PAPER", "TESTNET", "LIVE"
     TRADING_MODE: str = "PAPER"
-    DEFAULT_PAIRS: List[str] = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    DEFAULT_PAIRS: List[str] = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT"]
     DEFAULT_TIMEFRAME: str = "15m"
     EVALUATION_INTERVAL_SECONDS: int = 300  # 5 minutes
 
