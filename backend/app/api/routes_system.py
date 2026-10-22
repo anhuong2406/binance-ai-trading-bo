@@ -12,6 +12,7 @@ from app.database.session import get_db, record_audit
 from app.database.models import AuditEvent, TradingSession
 from app.security.credentials import mask_secret
 from app.scheduler.controller import trading_controller
+from app.ai.gateway import ai_gateway
 
 router = APIRouter(prefix="/api/system", tags=["System"])
 

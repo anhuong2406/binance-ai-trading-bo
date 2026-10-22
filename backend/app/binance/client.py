@@ -7,6 +7,7 @@ import hmac
 import hashlib
 import time
 import asyncio
+import urllib.parse
 from typing import Dict, Any, List, Optional
 from decimal import Decimal, ROUND_DOWN
 import httpx
@@ -40,22 +41,21 @@ class BinanceSpotClient:
     def _get_timestamp_ms(self) -> int:
         return int(time.time() * 1000) + self.time_offset_ms
 
-    def _sign_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Sign request params with HMAC-SHA256 according to Binance API spec."""
+    def _sign_query(self, params: Dict[str, Any]) -> str:
+        """Sign request params with HMAC-SHA256 according to Binance API spec, returning query string."""
         if not self.api_secret:
             raise ValueError("Binance API Secret is required for signed endpoints.")
         
         params["timestamp"] = self._get_timestamp_ms()
         params["recvWindow"] = 5000
         
-        query_string = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+        query_string = urllib.parse.urlencode(params)
         signature = hmac.new(
-            self.api_secret.encode("utf-8"),
+            self.api_secret.strip().encode("utf-8"),
             query_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest()
-        params["signature"] = signature
-        return params
+        return f"{query_string}&signature={signature}"
 
     async def sync_server_time(self) -> int:
         """Synchronize local clock with Binance server time."""
@@ -79,23 +79,27 @@ class BinanceSpotClient:
     ) -> Any:
         url = f"{self.base_url}{endpoint}"
         headers = {}
-        params = params.copy() if params else {}
+        params_dict = params.copy() if params else {}
 
         if self.api_key:
-            headers["X-MBX-APIKEY"] = self.api_key
+            headers["X-MBX-APIKEY"] = self.api_key.strip()
 
+        req_params = None
         if signed:
-            params = self._sign_query(params)
+            signed_query = self._sign_query(params_dict)
+            url = f"{url}?{signed_query}"
+        else:
+            req_params = params_dict if params_dict else None
 
         for attempt in range(retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     if method.upper() == "GET":
-                        resp = await client.get(url, params=params, headers=headers)
+                        resp = await client.get(url, params=req_params, headers=headers)
                     elif method.upper() == "POST":
-                        resp = await client.post(url, params=params, headers=headers)
+                        resp = await client.post(url, params=req_params, headers=headers)
                     elif method.upper() == "DELETE":
-                        resp = await client.delete(url, params=params, headers=headers)
+                        resp = await client.delete(url, params=req_params, headers=headers)
                     else:
                         raise ValueError(f"Unsupported HTTP method {method}")
 
@@ -110,7 +114,9 @@ class BinanceSpotClient:
                         err_data = resp.json()
                         if err_data.get("code") == -1021 and attempt < retries:
                             await self.sync_server_time()
-                            params = self._sign_query(params)
+                            if signed:
+                                signed_query = self._sign_query(params_dict)
+                                url = f"{self.base_url}{endpoint}?{signed_query}"
                             continue
 
                     resp.raise_for_status()
