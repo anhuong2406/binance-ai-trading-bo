@@ -47,7 +47,12 @@ export const SettingsPage: React.FC = () => {
     try {
       setTestingAI(true);
       setAiTestResult(null);
-      const res = await api.testAI();
+      const res = await api.testAI({
+        base_url: aiBaseUrl,
+        api_key: aiApiKey,
+        gpt_model_id: gptModelId,
+        gemini_model_id: geminiModelId,
+      });
       setAiTestResult(res);
     } catch (e: any) {
       setAiTestResult({ status: 'ERROR', message: e.message });

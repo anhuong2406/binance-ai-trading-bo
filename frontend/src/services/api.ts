@@ -136,8 +136,17 @@ export const api = {
   },
 
   // AI
-  async testAI(): Promise<any> {
-    const res = await fetch(`${BASE_URL}/ai/test`);
+  async testAI(payload?: {
+    base_url?: string;
+    api_key?: string;
+    gpt_model_id?: string;
+    gemini_model_id?: string;
+  }): Promise<any> {
+    const res = await fetch(`${BASE_URL}/ai/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
     return res.json();
   },
 
