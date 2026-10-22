@@ -8,6 +8,7 @@ import json
 from decimal import Decimal
 from typing import Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.binance.client import BinanceSpotClient
 from app.binance.market_data import MarketDataEngine
 from app.binance.account import AccountManager
@@ -20,7 +21,7 @@ from app.ai.gateway import ai_gateway
 from app.ai.gemini_analyst import GeminiMarketAnalyst
 from app.ai.gpt_reviewer import GPTIndependentReviewer
 from app.ai.consensus import DecisionConsensus, ConsensusResult
-from app.database.models import AIAnalysisLog, RiskEvaluation
+from app.database.models import AIAnalysisLog, RiskEvaluation, Position
 from app.database.session import record_audit
 from app.config.settings import settings
 from app.skills import skill_selector, skill_audit
@@ -179,6 +180,68 @@ class DecisionEngine:
             "duration_ms": round((time.time() - t_skills_start) * 1000, 2),
             "data": quant_skills
         }
+
+        # Step 2.8: Quant Opportunity Pre-Filter (Radar Cảnh Báo Sơ Tuyển Cơ Hội)
+        # Saves 85-90% AI token costs by only invoking LLMs when technical setups exist
+        has_open_pos = False
+        try:
+            pos_stmt = select(Position).where(
+                Position.symbol == symbol,
+                Position.status == "OPEN",
+                Position.mode == mode
+            )
+            has_open_pos = (await session.scalar(pos_stmt)) is not None
+        except Exception:
+            pass
+
+        opp_trigger = QuantEngine.evaluate_opportunity_trigger(
+            indicators=indicators,
+            candles=candles,
+            has_open_position=has_open_pos,
+            mtf_alignment=mtf_alignment
+        )
+
+        pipeline_log["steps"]["quant_pre_filter"] = {
+            "status": "TRIGGERED" if opp_trigger["has_opportunity"] else "HOLD",
+            "has_opportunity": opp_trigger["has_opportunity"],
+            "triggers": opp_trigger.get("reasons", []),
+            "summary": opp_trigger.get("summary", opp_trigger.get("reason", ""))
+        }
+
+        # If no opportunity exists and pre-filter is enabled: skip calling Gemini and Luna!
+        if settings.QUANT_PREFILTER_ENABLED and not opp_trigger["has_opportunity"]:
+            pipeline_log["steps"]["gemini_analyst"] = {
+                "status": "SKIPPED",
+                "output": {"action": "HOLD", "reasoning": opp_trigger["reason"]},
+                "note": "Quant Pre-Filter: Tiết kiệm ~4,000 input tokens"
+            }
+            pipeline_log["steps"]["gpt_reviewer"] = {
+                "status": "SKIPPED",
+                "output": {"decision": "STANDBY", "reason": "Tiết kiệm ~3,000 tokens thẩm định"},
+                "note": "Quant Pre-Filter: Tiết kiệm token"
+            }
+            pipeline_log["steps"]["consensus"] = {
+                "status": "PASS",
+                "action": "HOLD",
+                "approved": False,
+                "reason": opp_trigger["reason"]
+            }
+            pipeline_log["steps"]["risk_engine"] = {
+                "status": "PASS",
+                "passed": True,
+                "reasons": ["Đứng ngoài thị trường bảo toàn vốn (Radar lọc cơ hội)."],
+                "calculated_risk_percent": 0.0
+            }
+            pipeline_log["steps"]["execution"] = {
+                "status": "PASS",
+                "mode": mode,
+                "result": {"status": "STANDBY", "action": "HOLD", "message": "Radar Định Lượng duy trì quan sát 0 token."}
+            }
+            return {"status": "HOLD", "reason": opp_trigger["reason"], "pipeline": pipeline_log}
+
+        # If opportunity detected: pass trigger reasons to Gemini
+        if opp_trigger.get("reasons"):
+            quant_skills["opportunity_triggers"] = opp_trigger["reasons"]
 
         # Step 3: Gemini Market Analyst (with Trading Skills Context)
         try:

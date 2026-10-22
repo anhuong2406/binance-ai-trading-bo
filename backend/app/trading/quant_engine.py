@@ -606,3 +606,104 @@ class QuantEngine:
                 "adx": adx
             }
         }
+
+    @classmethod
+    def evaluate_opportunity_trigger(
+        cls,
+        indicators: Dict[str, Any],
+        candles: List[Any],
+        has_open_position: bool = False,
+        mtf_alignment: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Quant Opportunity Pre-Filter (Radar Sơ Tuyển Cơ Hội).
+        Evaluates whether current technical conditions justify waking up LLMs (Gemini & GPT-6 Luna).
+        If has_open_position is True: ALWAYS triggers AI to manage existing position.
+        If NO setup is detected: skips AI call and returns HOLD, saving ~7,000 tokens per evaluation.
+        """
+        if has_open_position:
+            return {
+                "has_opportunity": True,
+                "reasons": ["Đang có vị thế mở — Kích hoạt AI để quản lý thoát lệnh/chốt lời."]
+            }
+
+        latest = indicators.get("latest", {})
+        series = indicators.get("series", {})
+        triggers = []
+
+        close = latest.get("close", 0.0)
+        ema9 = latest.get("ema9")
+        ema21 = latest.get("ema21")
+        rsi14 = latest.get("rsi14")
+        stoch_k = latest.get("stoch_rsi_k")
+        stoch_d = latest.get("stoch_rsi_d")
+        macd_hist = latest.get("macd_hist")
+        bb_percent_b = latest.get("bb_percent_b")
+        volume_ratio = latest.get("volume_ratio", 1.0)
+        plus_di = latest.get("plus_di")
+        minus_di = latest.get("minus_di")
+        adx = latest.get("adx")
+
+        # Previous MACD histogram for momentum change
+        macd_data = series.get("macd")
+        macd_series = macd_data.get("histogram", []) if isinstance(macd_data, dict) else []
+        prev_macd_hist = macd_series[-2] if len(macd_series) >= 2 else None
+
+        # 1. Oversold / Dip Buying Opportunity
+        if rsi14 is not None and rsi14 <= 45.0:
+            triggers.append(f"RSI chạm vùng giá rẻ ({rsi14:.1f} <= 45)")
+        if stoch_k is not None and stoch_k <= 35.0:
+            triggers.append(f"StochRSI vùng quá bán (%K={stoch_k:.1f} <= 35)")
+        if stoch_k is not None and stoch_d is not None and stoch_k > stoch_d and stoch_k < 50.0:
+            triggers.append(f"StochRSI giao cắt vàng (%K={stoch_k:.1f} cắt lên %D={stoch_d:.1f})")
+
+        # 2. Bullish Momentum / EMA Breakout
+        if ema9 and ema21 and close > ema9 and ema9 > ema21:
+            triggers.append("Xu hướng tăng EMA9 > EMA21 và giá trên EMA9")
+        if macd_hist is not None and prev_macd_hist is not None and macd_hist > 0 and macd_hist > prev_macd_hist:
+            triggers.append("Động lượng MACD Histogram dương và đang mở rộng")
+        if plus_di and minus_di and adx and plus_di > minus_di and adx > 20:
+            triggers.append(f"Lực mua chiếm ưu thế (+DI={plus_di:.1f} > -DI={minus_di:.1f}, ADX={adx:.1f})")
+
+        # 3. Mean Reversion / Bollinger Bands
+        if bb_percent_b is not None and bb_percent_b <= 0.35:
+            triggers.append(f"Giá tiệm cận dải dưới Bollinger Band (%B={bb_percent_b:.2f})")
+        elif bb_percent_b is not None and bb_percent_b >= 0.75 and ema9 and close > ema9:
+            triggers.append(f"Giá bám dải trên Bollinger Band (%B={bb_percent_b:.2f})")
+
+        # 4. Volume Surge
+        if volume_ratio >= 1.25:
+            triggers.append(f"Khối lượng volume bùng nổ ({volume_ratio:.2f}x so với TB)")
+
+        # 5. Bullish Reversal Candlestick
+        if candles and len(candles) >= 2:
+            cur = candles[-1]
+            prev = candles[-2]
+            if cur.close > cur.open and cur.open < prev.close:
+                body = cur.close - cur.open
+                total_range = cur.high - cur.low
+                if total_range > 0 and (body / total_range) >= 0.6:
+                    triggers.append("Nến xanh thân đặc lực mua mạnh (Bullish Candlestick)")
+
+        # 6. Multi-Timeframe Alignment Bonus
+        if mtf_alignment and mtf_alignment.get("allow_buy") is True:
+            triggers.append(f"Khung lớn 1H và 15M đồng thuận TĂNG ({mtf_alignment.get('alignment')})")
+
+        has_opportunity = len(triggers) > 0
+        if has_opportunity:
+            return {
+                "has_opportunity": True,
+                "reasons": triggers,
+                "trigger_count": len(triggers),
+                "summary": " | ".join(triggers[:3])
+            }
+        else:
+            return {
+                "has_opportunity": False,
+                "reasons": [],
+                "trigger_count": 0,
+                "reason": (
+                    "Radar Định Lượng: Thị trường chưa có tín hiệu kỹ thuật (không quá bán, không breakout, volume thấp). "
+                    "Tự động giữ HOLD, tiết kiệm ~7,000 token."
+                )
+            }

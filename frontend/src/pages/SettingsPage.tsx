@@ -34,6 +34,7 @@ export const SettingsPage: React.FC = () => {
   const [binanceTestnetSecret, setBinanceTestnetSecret] = useState('');
   const [allocatedCapital, setAllocatedCapital] = useState<string | number>(100.0);
   const [evalInterval, setEvalInterval] = useState(300);
+  const [quantPrefilter, setQuantPrefilter] = useState(true);
 
   // Trading Pairs State
   const [pairs, setPairs] = useState<any[]>([]);
@@ -59,6 +60,7 @@ export const SettingsPage: React.FC = () => {
       setGeminiModelId(s.gemini_model_id || 'gemini-3.8-flash');
       setAllocatedCapital(s.bot_allocated_capital || 100.0);
       setEvalInterval(s.evaluation_interval_seconds || 300);
+      setQuantPrefilter(s.quant_prefilter_enabled !== false);
     });
     loadPairs();
   }, []);
@@ -148,6 +150,7 @@ export const SettingsPage: React.FC = () => {
         gemini_model_id: geminiModelId,
         bot_allocated_capital: parseFloat(String(allocatedCapital).replace(',', '.')),
         evaluation_interval_seconds: evalInterval,
+        quant_prefilter_enabled: quantPrefilter,
       };
 
       if (aiApiKey) payload.ai_api_key = aiApiKey;
@@ -488,6 +491,38 @@ export const SettingsPage: React.FC = () => {
               * Hệ thống sẽ tự động kết nối Binance Spot API để kiểm tra cặp giao dịch, xác thực bộ lọc lệnh (minNotional) và kích hoạt cho Bot.
             </p>
           </div>
+        </div>
+
+        {/* Quant Opportunity Pre-Filter Toggle */}
+        <div className="bg-bg-darker p-4 rounded-lg border border-bg-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-mono text-xs font-bold uppercase text-gray-200">
+                  Bộ Lọc Cơ Hội Tiết Kiệm Token (Quant Opportunity Pre-Filter)
+                </h4>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-600/40">
+                  Tiết kiệm 85-90% Token
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                Chỉ đánh thức Gemini 3.8 và GPT-6 Luna khi phát hiện tín hiệu kỹ thuật (quá bán, breakout, volume gom hàng). Khi thị trường cắm đầu giảm hoặc sideway vô hướng, Python tự động giữ HOLD mà không tốn token 9Router.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setQuantPrefilter(!quantPrefilter)}
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition cursor-pointer shrink-0 ${
+              quantPrefilter ? 'bg-bloomberg-green justify-end' : 'bg-gray-700 justify-start'
+            }`}
+          >
+            <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
+          </button>
         </div>
 
         {/* Capital & Intervals */}

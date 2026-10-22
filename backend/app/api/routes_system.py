@@ -35,6 +35,7 @@ class SettingsUpdateRequest(BaseModel):
     binance_testnet_api_secret: Optional[str] = None
     bot_allocated_capital: Optional[float] = None
     evaluation_interval_seconds: Optional[int] = None
+    quant_prefilter_enabled: Optional[bool] = None
 
 @router.get("/status")
 async def get_system_status():
@@ -143,6 +144,7 @@ async def get_settings():
         "binance_testnet_key_masked": mask_secret(settings.BINANCE_TESTNET_API_KEY),
         "bot_allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
         "evaluation_interval_seconds": settings.EVALUATION_INTERVAL_SECONDS,
+        "quant_prefilter_enabled": settings.QUANT_PREFILTER_ENABLED,
         "max_risk_per_trade_percent": settings.MAX_RISK_PER_TRADE_PERCENT,
         "max_position_size_percent": settings.MAX_POSITION_SIZE_PERCENT,
         "daily_max_loss_percent": settings.DAILY_MAX_LOSS_PERCENT,
@@ -171,6 +173,8 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
         settings.BOT_ALLOCATED_CAPITAL_USDT = req.bot_allocated_capital
     if req.evaluation_interval_seconds is not None and req.evaluation_interval_seconds >= 30:
         settings.EVALUATION_INTERVAL_SECONDS = req.evaluation_interval_seconds
+    if req.quant_prefilter_enabled is not None:
+        settings.QUANT_PREFILTER_ENABLED = req.quant_prefilter_enabled
 
     # Update active client instances
     trading_controller.binance_client.set_credentials(

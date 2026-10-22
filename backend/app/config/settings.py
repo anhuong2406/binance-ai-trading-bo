@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     AI_MAX_RETRIES: int = 3
     AI_MAX_TOKENS: int = 2048
     MAX_AI_COST_PER_DAY: float = 5.0
+    QUANT_PREFILTER_ENABLED: bool = True  # Cost optimizer: only calls LLMs when technical trigger occurs
 
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
