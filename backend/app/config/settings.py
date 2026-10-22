@@ -13,7 +13,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(BASE_DIR / ".env"),
+        env_file=(str(BASE_DIR / ".env"), str(BASE_DIR.parent / ".env")),
         env_file_encoding="utf-8",
         extra="ignore"
     )

@@ -176,10 +176,44 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
         api_secret=settings.BINANCE_TESTNET_API_SECRET if trading_controller.mode == "TESTNET" else settings.BINANCE_API_SECRET,
         use_testnet=(trading_controller.mode == "TESTNET")
     )
+    ai_gateway.update_config(base_url=settings.AI_BASE_URL, api_key=settings.AI_API_KEY)
     trading_controller.decision_engine.gemini_analyst.gateway.update_config(
         base_url=settings.AI_BASE_URL,
         api_key=settings.AI_API_KEY
     )
+    trading_controller.decision_engine.gpt_reviewer.gateway.update_config(
+        base_url=settings.AI_BASE_URL,
+        api_key=settings.AI_API_KEY
+    )
+
+    # Persist updated values to .env files
+    from pathlib import Path
+    for p in [Path(".env"), Path("backend/.env"), Path("../.env")]:
+        if p.exists():
+            try:
+                text = p.read_text(encoding="utf-8")
+                updates = {
+                    "AI_BASE_URL": settings.AI_BASE_URL,
+                    "AI_API_KEY": settings.AI_API_KEY,
+                    "GPT_MODEL_ID": settings.GPT_MODEL_ID,
+                    "GEMINI_MODEL_ID": settings.GEMINI_MODEL_ID,
+                }
+                lines = text.splitlines()
+                new_lines = []
+                handled = set()
+                for line in lines:
+                    replaced = False
+                    for k, v in updates.items():
+                        if line.startswith(f"{k}=") or line.startswith(f"#{k}="):
+                            new_lines.append(f"{k}={v}")
+                            handled.add(k)
+                            replaced = True
+                            break
+                    if not replaced:
+                        new_lines.append(line)
+                p.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            except Exception:
+                pass
 
     await record_audit(db, "SETTINGS_UPDATED", "Cấu hình hệ thống đã được cập nhật thành công", "INFO")
     return {"status": "SUCCESS", "message": "Đã lưu cài đặt mới"}

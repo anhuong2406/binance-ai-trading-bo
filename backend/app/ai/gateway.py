@@ -69,12 +69,14 @@ class AIGateway:
         Sends chat completion request to Gateway.
         Returns: (parsed_json_dict, latency_ms, token_usage)
         """
-        if not self.api_key:
+        active_key = self.api_key or settings.AI_API_KEY
+        if not active_key:
             raise ValueError("Chưa cấu hình AI API Key!")
 
-        endpoint = f"{self.base_url}/chat/completions"
+        active_base = self.resolve_base_url(self.base_url or settings.AI_BASE_URL, active_key)
+        endpoint = f"{active_base}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {active_key}",
             "Content-Type": "application/json"
         }
 
@@ -90,6 +92,7 @@ class AIGateway:
             ],
             "temperature": temperature,
             "max_tokens": settings.AI_MAX_TOKENS,
+            "stream": False,
             "response_format": {"type": "json_object"}
         }
 
@@ -105,6 +108,17 @@ class AIGateway:
                 async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
                     resp = await client.post(endpoint, json=payload, headers=headers)
                     
+                    # If unauthorized or not found, fail immediately without retrying
+                    if resp.status_code == 401:
+                        err_msg = resp.text[:200]
+                        try:
+                            err_msg = resp.json().get("error", {}).get("message", err_msg)
+                        except Exception:
+                            pass
+                        raise ValueError(f"API Key không hợp lệ: {err_msg}")
+                    if resp.status_code == 404:
+                        raise ValueError(f"Model [{model_id}] không tồn tại trên Gateway (404)")
+
                     # If gateway rejected response_format or reasoning_effort, retry without them
                     if resp.status_code == 400 and ("response_format" in resp.text or "reasoning" in resp.text):
                         payload.pop("response_format", None)
@@ -124,10 +138,13 @@ class AIGateway:
                     usage = data.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
 
                     return parsed_json, latency_ms, usage
+            except ValueError as ve:
+                raise ve
             except Exception as e:
                 last_error = e
                 # Wait briefly before retry
-                time.sleep(1.0 * (attempt + 1))
+                import asyncio
+                await asyncio.sleep(0.5 * (attempt + 1))
 
         raise RuntimeError(f"Lỗi gọi AI Model [{model_id}]: {str(last_error)}")
 

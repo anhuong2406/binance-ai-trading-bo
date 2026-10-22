@@ -106,25 +106,7 @@ class DecisionEngine:
             pipeline_log["steps"]["gemini_analyst"] = {"status": "FAIL", "error": str(e)}
             return {"status": "ABORTED", "reason": f"Lỗi Gemini Analyst: {str(e)}", "pipeline": pipeline_log}
 
-        # If Gemini says HOLD, we record log and exit early cleanly
-        if gemini_out.get("action") == "HOLD":
-            # Record AI Analysis Log
-            ai_log = AIAnalysisLog(
-                symbol=symbol,
-                timeframe=timeframe,
-                gemini_output=json.dumps(gemini_out, ensure_ascii=False),
-                gpt_output=json.dumps({"decision": "SKIPPED", "reason": "Gemini đề xuất HOLD, không cần thẩm định"}, ensure_ascii=False),
-                consensus_action="HOLD",
-                execution_approved=False,
-                gemini_latency_ms=gemini_ms,
-                gpt_latency_ms=0,
-                total_tokens=gemini_usage.get("total_tokens", 0)
-            )
-            session.add(ai_log)
-            await session.commit()
-            return {"status": "HOLD", "reason": "Gemini Analyst đề xuất quan sát (HOLD)", "pipeline": pipeline_log}
-
-        # Step 4: GPT-6 Luna Independent Reviewer
+        # Step 4: GPT-6 Luna Independent Reviewer (Luôn luôn thẩm định độc lập)
         try:
             gpt_out, gpt_ms, gpt_usage = await self.gpt_reviewer.review(
                 symbol=symbol,
