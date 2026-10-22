@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg-darkest text-gray-200 antialiased font-sans;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #080B10;
+}
+::-webkit-scrollbar-thumb {
+  background: #30363D;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #484F58;
+}
+
+/* Bloomberg terminal glowing animations */
+@keyframes pulse-red {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(255, 23, 68, 0);
+  }
+}
+
+.emergency-btn-pulse {
+  animation: pulse-red 2s infinite;
+}

@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+data/*.db
+data/.vault.key
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Environment & Local Secrets
+.env
+.DS_Store
+Thumbs.db
