@@ -201,6 +201,8 @@ class DecisionEngine:
             try:
                 acc_info = await self.account_manager.get_spot_balances()
                 avail_usdt = acc_info["usdtFree"]
+                if avail_usdt < allocated_capital:
+                    allocated_capital = avail_usdt
             except Exception as e:
                 pipeline_log["steps"]["risk_engine"] = {"status": "FAIL", "error": f"Không thể đọc số dư sàn: {str(e)}"}
                 return {"status": "ABORTED", "reason": "Lỗi kết nối tài khoản Binance", "pipeline": pipeline_log}
