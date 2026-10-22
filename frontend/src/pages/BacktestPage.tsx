@@ -17,6 +17,7 @@ export const BacktestPage: React.FC = () => {
   const [strategies, setStrategies] = useState<{ name: string; description: string }[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState('');
   const [symbol, setSymbol] = useState('BTCUSDT');
+  const [availablePairs, setAvailablePairs] = useState<string[]>(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT']);
   const [timeframe, setTimeframe] = useState('15m');
   const [candleLimit, setCandleLimit] = useState(300);
   const [initialCapital, setInitialCapital] = useState(1000.0);
@@ -30,6 +31,11 @@ export const BacktestPage: React.FC = () => {
       setStrategies(data);
       if (data.length > 0) setSelectedStrategy(data[0].name);
     });
+    api.getPairsList().then((res) => {
+      if (res.active_symbols && res.active_symbols.length > 0) {
+        setAvailablePairs(res.active_symbols);
+      }
+    }).catch(console.error);
   }, []);
 
   const handleRunBacktest = async (e: React.FormEvent) => {
@@ -88,10 +94,9 @@ export const BacktestPage: React.FC = () => {
               onChange={(e) => setSymbol(e.target.value)}
               className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-1.5 text-gray-100 focus:outline-none"
             >
-              <option value="BTCUSDT">BTCUSDT</option>
-              <option value="ETHUSDT">ETHUSDT</option>
-              <option value="SOLUSDT">SOLUSDT</option>
-              <option value="DOGEUSDT">DOGEUSDT</option>
+              {availablePairs.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
 

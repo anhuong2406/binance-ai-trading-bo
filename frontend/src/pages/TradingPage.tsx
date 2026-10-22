@@ -24,8 +24,19 @@ export const TradingPage: React.FC<TradingPageProps> = ({ positions, onClosePosi
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const pairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT'];
+  const [pairs, setPairs] = useState<string[]>(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT']);
   const intervals = ['5m', '15m', '1h', '4h'];
+
+  useEffect(() => {
+    api.getPairsList().then((res) => {
+      if (res.active_symbols && res.active_symbols.length > 0) {
+        setPairs(res.active_symbols);
+        if (!res.active_symbols.includes(selectedSymbol)) {
+          setSelectedSymbol(res.active_symbols[0]);
+        }
+      }
+    }).catch(console.error);
+  }, []);
 
   const loadData = async () => {
     try {

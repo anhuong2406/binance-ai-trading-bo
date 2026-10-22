@@ -12,6 +12,7 @@ from app.database.session import get_db, record_audit
 from app.database.models import AuditEvent, TradingSession
 from app.security.credentials import mask_secret
 from app.scheduler.controller import trading_controller
+from app.trading.pair_manager import pair_manager
 from app.ai.gateway import ai_gateway
 
 router = APIRouter(prefix="/api/system", tags=["System"])
@@ -46,7 +47,7 @@ async def get_system_status():
         "emergency_stop": settings.EMERGENCY_STOP_ACTIVE,
         "live_locked": settings.LIVE_SPOT_LOCKED,
         "allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
-        "active_pairs": settings.DEFAULT_PAIRS,
+        "active_pairs": pair_manager.get_active_symbols(),
         "timeframe": settings.DEFAULT_TIMEFRAME,
         "interval_seconds": settings.EVALUATION_INTERVAL_SECONDS
     }

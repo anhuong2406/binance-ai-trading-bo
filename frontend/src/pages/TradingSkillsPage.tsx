@@ -23,6 +23,7 @@ export const TradingSkillsPage: React.FC = () => {
   const [comparisonModes, setComparisonModes] = useState<any[]>([]);
   const [quantTestResult, setQuantTestResult] = useState<any>(null);
   const [testSymbol, setTestSymbol] = useState('BTCUSDT');
+  const [availablePairs, setAvailablePairs] = useState<string[]>(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT']);
   const [loading, setLoading] = useState(false);
   const [testingQuant, setTestingQuant] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('ALL');
@@ -50,6 +51,11 @@ export const TradingSkillsPage: React.FC = () => {
     loadData();
     // Also run an initial quant test for BTCUSDT to display live cards
     handleRunQuantTest('BTCUSDT');
+    api.getPairsList().then((res) => {
+      if (res.active_symbols && res.active_symbols.length > 0) {
+        setAvailablePairs(res.active_symbols);
+      }
+    }).catch(console.error);
   }, []);
 
   const handleToggle = async (skillName: string, currentEnabled: boolean) => {
@@ -146,10 +152,9 @@ export const TradingSkillsPage: React.FC = () => {
               }}
               className="bg-bg-darker border border-bg-border rounded-lg px-2.5 py-2 text-xs font-mono text-gray-200 focus:outline-none focus:border-bloomberg-orange cursor-pointer"
             >
-              <option value="BTCUSDT">BTCUSDT</option>
-              <option value="ETHUSDT">ETHUSDT</option>
-              <option value="SOLUSDT">SOLUSDT</option>
-              <option value="DOGEUSDT">DOGEUSDT</option>
+              {availablePairs.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
             <button
               onClick={() => handleRunQuantTest(testSymbol)}

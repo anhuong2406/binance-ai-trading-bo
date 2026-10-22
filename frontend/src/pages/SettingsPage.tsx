@@ -9,7 +9,9 @@ import {
   CheckCircle,
   XCircle,
   Save,
-  Activity
+  Activity,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -33,6 +35,23 @@ export const SettingsPage: React.FC = () => {
   const [allocatedCapital, setAllocatedCapital] = useState<string | number>(100.0);
   const [evalInterval, setEvalInterval] = useState(300);
 
+  // Trading Pairs State
+  const [pairs, setPairs] = useState<any[]>([]);
+  const [newSymbol, setNewSymbol] = useState('');
+  const [newName, setNewName] = useState('');
+  const [pairLoading, setPairLoading] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [pairSuccess, setPairSuccess] = useState<string | null>(null);
+
+  const loadPairs = async () => {
+    try {
+      const res = await api.getPairsList();
+      setPairs(res.pairs || []);
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     api.getSettings().then((s) => {
       setAiBaseUrl(s.ai_base_url || 'https://api.openai.com/v1');
@@ -41,7 +60,50 @@ export const SettingsPage: React.FC = () => {
       setAllocatedCapital(s.bot_allocated_capital || 100.0);
       setEvalInterval(s.evaluation_interval_seconds || 300);
     });
+    loadPairs();
   }, []);
+
+  const handleTogglePair = async (symbol: string, currentEnabled: boolean) => {
+    try {
+      setPairError(null);
+      setPairSuccess(null);
+      await api.togglePair(symbol, !currentEnabled);
+      await loadPairs();
+    } catch (e: any) {
+      setPairError(e.message);
+    }
+  };
+
+  const handleAddPair = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSymbol.trim()) return;
+    try {
+      setPairLoading(true);
+      setPairError(null);
+      setPairSuccess(null);
+      const res = await api.addPair(newSymbol.trim(), newName.trim() || undefined);
+      setPairSuccess(res.message);
+      setNewSymbol('');
+      setNewName('');
+      await loadPairs();
+    } catch (e: any) {
+      setPairError(e.message);
+    } finally {
+      setPairLoading(false);
+    }
+  };
+
+  const handleRemovePair = async (symbol: string) => {
+    if (!confirm(`Bạn có chắc muốn xóa cặp ${symbol}?`)) return;
+    try {
+      setPairError(null);
+      setPairSuccess(null);
+      await api.removePair(symbol);
+      await loadPairs();
+    } catch (e: any) {
+      setPairError(e.message);
+    }
+  };
 
   const handleTestAI = async () => {
     try {
@@ -290,6 +352,142 @@ export const SettingsPage: React.FC = () => {
               )}
             </div>
           )}
+        </div>
+
+        {/* Trading Pairs Management Section */}
+        <div className="bg-bg-darker p-4 rounded-lg border border-bg-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-bg-border gap-2">
+            <div>
+              <h3 className="font-mono text-xs font-bold uppercase text-gray-200 flex items-center gap-2">
+                <Coins className="w-4 h-4 text-bloomberg-orange" />
+                Chọn Mã Giao Dịch Tự Động (Trading Pairs Selector)
+              </h3>
+              <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                Bật/tắt cặp giao dịch để chỉ định AI và Bot quét & đặt lệnh cho mã bạn muốn.
+              </p>
+            </div>
+            <span className="text-xs font-mono px-2.5 py-1 rounded bg-bg-card border border-bg-border text-bloomberg-cyan self-start sm:self-auto">
+              Đang chạy: <strong>{pairs.filter((p) => p.enabled).length}/{pairs.length} cặp</strong>
+            </span>
+          </div>
+
+          {pairError && (
+            <div className="mb-3 p-2.5 bg-bloomberg-red/20 border border-bloomberg-red/40 rounded text-xs text-red-300 font-mono flex items-center gap-2">
+              <XCircle className="w-4 h-4 shrink-0" />
+              <span>{pairError}</span>
+            </div>
+          )}
+
+          {pairSuccess && (
+            <div className="mb-3 p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded text-xs text-emerald-300 font-mono flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{pairSuccess}</span>
+            </div>
+          )}
+
+          {/* Pairs Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            {pairs.map((p) => (
+              <div
+                key={p.symbol}
+                className={`p-3 rounded-lg border transition flex items-center justify-between ${
+                  p.enabled
+                    ? 'bg-bg-card border-bloomberg-orange/40 shadow-sm'
+                    : 'bg-bg-card/40 border-bg-border opacity-60'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePair(p.symbol, p.enabled)}
+                    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition cursor-pointer ${
+                      p.enabled ? 'bg-bloomberg-orange justify-end' : 'bg-gray-700 justify-start'
+                    }`}
+                    title={p.enabled ? 'Bấm để tắt mã này' : 'Bấm để bật mã này'}
+                  >
+                    <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
+                  </button>
+
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-sm text-gray-100">{p.symbol}</span>
+                      <span className="text-2xs font-mono text-gray-400">({p.name})</span>
+                      {p.min_notional <= 1.0 && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 border border-emerald-600/50 text-emerald-400">
+                          ⚡ Min {p.min_notional}$
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-gray-400 mt-0.5">
+                      {p.last_price > 0 && (
+                        <span>Giá: <strong className="text-gray-200">${p.last_price.toLocaleString()}</strong></span>
+                      )}
+                      {p.price_change_percent !== 0 && (
+                        <span className={p.price_change_percent >= 0 ? 'text-bloomberg-green' : 'text-bloomberg-red'}>
+                          {p.price_change_percent >= 0 ? '+' : ''}{p.price_change_percent.toFixed(2)}%
+                        </span>
+                      )}
+                      <span className="text-gray-500">| Lệnh min: {p.min_notional} USDT</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                    p.enabled ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-700/40' : 'bg-gray-800 text-gray-400'
+                  }`}>
+                    {p.enabled ? 'ĐANG CHẠY' : 'ĐÃ TẮT'}
+                  </span>
+                  {!p.is_default && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePair(p.symbol)}
+                      className="p-1 hover:text-red-400 text-gray-500 transition cursor-pointer"
+                      title="Xóa mã này khỏi danh sách"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add New Pair Form */}
+          <div className="p-3 bg-bg-darkest rounded-lg border border-bg-border/60">
+            <h4 className="text-xs font-mono font-bold text-gray-300 mb-2 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5 text-bloomberg-orange" />
+              Thêm cặp giao dịch mới từ Binance Spot:
+            </h4>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                placeholder="VD: BNB, PEPE, XRP, ADA..."
+                value={newSymbol}
+                onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+                className="flex-1 bg-bg-card border border-bg-border rounded px-3 py-1.5 text-xs font-mono text-gray-100 uppercase focus:outline-none focus:border-bloomberg-orange"
+              />
+              <input
+                type="text"
+                placeholder="Tên gợi nhớ (VD: Binance Coin)"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="flex-1 bg-bg-card border border-bg-border rounded px-3 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-bloomberg-orange"
+              />
+              <button
+                type="button"
+                onClick={handleAddPair}
+                disabled={pairLoading || !newSymbol.trim()}
+                className="px-4 py-1.5 bg-bloomberg-orange hover:bg-amber-500 disabled:opacity-50 text-black font-mono text-xs font-bold rounded flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{pairLoading ? 'Đang kiểm tra Binance...' : 'Thêm Vào Bot'}</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 font-mono mt-1.5">
+              * Hệ thống sẽ tự động kết nối Binance Spot API để kiểm tra cặp giao dịch, xác thực bộ lọc lệnh (minNotional) và kích hoạt cho Bot.
+            </p>
+          </div>
         </div>
 
         {/* Capital & Intervals */}

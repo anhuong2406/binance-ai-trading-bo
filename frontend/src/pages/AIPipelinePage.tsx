@@ -24,8 +24,17 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
   const [selectedLog, setSelectedLog] = useState<AIAnalysisLog | null>(null);
   const [currentReport, setCurrentReport] = useState<any>(lastReport);
   const [analyzingSymbol, setAnalyzingSymbol] = useState('BTCUSDT');
+  const [availablePairs, setAvailablePairs] = useState<string[]>(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT']);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getPairsList().then((res) => {
+      if (res.active_symbols && res.active_symbols.length > 0) {
+        setAvailablePairs(res.active_symbols);
+      }
+    }).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (lastReport) {
@@ -87,10 +96,9 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
             onChange={(e) => setAnalyzingSymbol(e.target.value)}
             className="bg-bg-darkest border border-bg-border rounded px-3 py-1.5 text-xs font-mono text-gray-200 focus:outline-none"
           >
-            <option value="BTCUSDT">BTCUSDT</option>
-            <option value="ETHUSDT">ETHUSDT</option>
-            <option value="SOLUSDT">SOLUSDT</option>
-            <option value="DOGEUSDT">DOGEUSDT</option>
+            {availablePairs.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
           </select>
 
           <button

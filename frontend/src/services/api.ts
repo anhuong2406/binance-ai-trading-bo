@@ -255,5 +255,49 @@ export const api = {
       throw new Error(err.detail || 'Lỗi kiểm tra công cụ định lượng');
     }
     return res.json();
+  },
+
+  // Trading Pairs Management
+  async getPairsList(): Promise<{ status: string; pairs: any[]; active_symbols: string[]; total: number; active_count: number }> {
+    const res = await fetch(`${BASE_URL}/pairs/list`);
+    if (!res.ok) throw new Error('Không thể tải danh sách cặp giao dịch');
+    return res.json();
+  },
+
+  async togglePair(symbol: string, enabled: boolean): Promise<any> {
+    const res = await fetch(`${BASE_URL}/pairs/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, enabled }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Lỗi bật/tắt cặp giao dịch');
+    }
+    return res.json();
+  },
+
+  async addPair(symbol: string, name?: string): Promise<any> {
+    const res = await fetch(`${BASE_URL}/pairs/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, name }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Lỗi thêm cặp giao dịch');
+    }
+    return res.json();
+  },
+
+  async removePair(symbol: string): Promise<any> {
+    const res = await fetch(`${BASE_URL}/pairs/${symbol}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Lỗi xóa cặp giao dịch');
+    }
+    return res.json();
   }
 };

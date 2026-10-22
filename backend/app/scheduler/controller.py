@@ -10,6 +10,7 @@ from app.config.settings import settings
 from app.binance.client import BinanceSpotClient
 from app.trading.decision_engine import DecisionEngine
 from app.trading.position_manager import PositionManager
+from app.trading.pair_manager import pair_manager
 from app.database.session import AsyncSessionLocal, record_audit
 from app.notifications.notifier import notifier
 
@@ -185,9 +186,9 @@ class AutoTradingController:
             return
 
         try:
-            # Get latest prices for default pairs
+            # Get latest prices for active pairs
             prices = {}
-            for pair in settings.DEFAULT_PAIRS:
+            for pair in pair_manager.get_active_symbols():
                 ticker = await self.binance_client.get_ticker_24hr(pair)
                 prices[pair] = float(ticker.get("lastPrice", 0.0))
 
@@ -217,7 +218,7 @@ class AutoTradingController:
         await self.broadcast_status()
 
         async with AsyncSessionLocal() as session:
-            for pair in settings.DEFAULT_PAIRS:
+            for pair in pair_manager.get_active_symbols():
                 try:
                     result = await self.decision_engine.execute_cycle(
                         session=session,

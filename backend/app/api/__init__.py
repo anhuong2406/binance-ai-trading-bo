@@ -5,6 +5,7 @@ from .routes_trading import router as trading_router
 from .routes_risk import router as risk_router
 from .routes_backtest import router as backtest_router
 from .routes_skills import router as skills_router
+from .routes_pairs import router as pairs_router
 from .websocket_handler import ws_manager
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "risk_router",
     "backtest_router",
     "skills_router",
+    "pairs_router",
     "ws_manager"
 ]
