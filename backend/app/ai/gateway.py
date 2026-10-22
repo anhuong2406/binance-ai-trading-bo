@@ -12,19 +12,30 @@ from app.config.settings import settings
 from app.security.sanitizer import sanitize_for_prompt
 
 class AIGateway:
+    def resolve_base_url(self, base_url: Optional[str], api_key: str) -> str:
+        if base_url and base_url.strip():
+            return base_url.rstrip("/")
+        # Auto-detect endpoint based on key pattern
+        if api_key.startswith("AIzaSy"):
+            return "https://generativelanguage.googleapis.com/v1beta/openai"
+        if api_key.startswith("sk-or-"):
+            return "https://openrouter.ai/api/v1"
+        return "https://api.openai.com/v1"
+
     def __init__(
         self,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None
     ):
-        self.base_url = (base_url or settings.AI_BASE_URL).rstrip("/")
-        self.api_key = api_key or settings.AI_API_KEY
+        raw_key = api_key or settings.AI_API_KEY
+        self.api_key = raw_key
+        self.base_url = self.resolve_base_url(base_url or settings.AI_BASE_URL, self.api_key)
         self.timeout = settings.AI_TIMEOUT_SECONDS
         self.max_retries = settings.AI_MAX_RETRIES
 
     def update_config(self, base_url: str, api_key: str):
-        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.base_url = self.resolve_base_url(base_url, api_key)
 
     def _extract_json(self, raw_content: str) -> Dict[str, Any]:
         """Extract and parse valid JSON from AI response, handling markdown blocks."""
