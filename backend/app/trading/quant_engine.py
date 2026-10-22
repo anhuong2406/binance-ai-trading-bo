@@ -4,6 +4,7 @@ Computes EMA 9/21/50/200, RSI 14, MACD, Bollinger Bands, ATR 14, ADX 14, Volume 
 Requires sufficient historical data bars before calculating indicators.
 """
 import math
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
 def calculate_sma(values: List[float], period: int) -> List[Optional[float]]:
@@ -72,6 +73,62 @@ def calculate_rsi(closes: List[float], period: int = 14) -> List[Optional[float]
             res.append(100.0 - (100.0 / (1.0 + rs)))
             
     return res
+
+def calculate_stoch_rsi(
+    closes: List[float],
+    rsi_period: int = 14,
+    stoch_period: int = 14,
+    k_period: int = 3,
+    d_period: int = 3
+) -> Dict[str, List[Optional[float]]]:
+    """
+    Stochastic RSI (%K, %D).
+    Calculates StochRSI from Wilder's RSI, smoothed by SMA(k) and SMA(d).
+    Output range: 0.0 - 100.0.
+    Values < 20 indicate deeply oversold, > 80 indicate overbought.
+    """
+    n = len(closes)
+    rsi_series = calculate_rsi(closes, rsi_period)
+
+    stoch_rsi: List[Optional[float]] = [None] * n
+    for i in range(n):
+        if i < (rsi_period + stoch_period - 1):
+            continue
+        window = [r for r in rsi_series[i - stoch_period + 1 : i + 1] if r is not None]
+        if len(window) < stoch_period:
+            continue
+        min_rsi = min(window)
+        max_rsi = max(window)
+        diff = max_rsi - min_rsi
+        cur_rsi = rsi_series[i]
+        if diff == 0 or cur_rsi is None:
+            stoch_rsi[i] = 50.0
+        else:
+            stoch_rsi[i] = ((cur_rsi - min_rsi) / diff) * 100.0
+
+    # Smooth %K = SMA(stoch_rsi, k_period)
+    k_series: List[Optional[float]] = [None] * n
+    for i in range(n):
+        if i < k_period - 1:
+            continue
+        w = [v for v in stoch_rsi[i - k_period + 1 : i + 1] if v is not None]
+        if len(w) == k_period:
+            k_series[i] = sum(w) / k_period
+
+    # Smooth %D = SMA(%K, d_period)
+    d_series: List[Optional[float]] = [None] * n
+    for i in range(n):
+        if i < d_period - 1:
+            continue
+        w = [v for v in k_series[i - d_period + 1 : i + 1] if v is not None]
+        if len(w) == d_period:
+            d_series[i] = sum(w) / d_period
+
+    return {
+        "stoch_rsi": stoch_rsi,
+        "k": k_series,
+        "d": d_series
+    }
 
 def calculate_macd(
     closes: List[float],
@@ -272,6 +329,78 @@ def calculate_adx(
         "minus_di": minus_di_list + [None] * (length - len(minus_di_list))
     }
 
+def detect_market_session(utc_dt: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Identifies active global trading sessions and liquidity characteristics.
+    Times in UTC (Vietnam time is UTC+7):
+      - ASIA:    00:00 - 08:00 UTC (07:00 - 15:00 VN) -> Moderate volatility, range-bound
+      - EUROPE:  07:00 - 16:00 UTC (14:00 - 23:00 VN) -> High liquidity, London breakout
+      - US:      13:30 - 21:00 UTC (20:30 - 04:00 VN) -> Peak volume & institutional trends
+      - DEAD_ZONE: 21:30 - 23:59 UTC (04:30 - 07:00 VN) -> Low liquidity, wide spreads, false breakouts
+    """
+    now = utc_dt or datetime.now(timezone.utc)
+    hour = now.hour + now.minute / 60.0
+    day_of_week = now.weekday()  # 5=Saturday, 6=Sunday
+    is_weekend = day_of_week in (5, 6)
+
+    active_sessions = []
+    if 0.0 <= hour < 8.0:
+        active_sessions.append("ASIA")
+    if 7.0 <= hour < 16.0:
+        active_sessions.append("EUROPE")
+    if 13.5 <= hour < 21.0:
+        active_sessions.append("US")
+
+    is_dead_zone = (21.5 <= hour < 24.0) or (0.0 <= hour < 1.0)
+
+    if "US" in active_sessions and "EUROPE" in active_sessions:
+        primary = "US_EUROPE_OVERLAP"
+        liquidity = "PEAK"
+        quality_score = 95
+        recommendation = "Phiên Mỹ - Âu trùng giờ: Thanh khoản đỉnh cao, xu hướng chuẩn xác nhất trong ngày."
+    elif "US" in active_sessions:
+        primary = "US_SESSION"
+        liquidity = "HIGH"
+        quality_score = 90
+        recommendation = "Phiên Mỹ: Khối lượng giao dịch lớn, xu hướng rõ nét."
+    elif "EUROPE" in active_sessions:
+        primary = "EUROPE_SESSION"
+        liquidity = "HIGH"
+        quality_score = 85
+        recommendation = "Phiên Âu: Thanh khoản tốt từ thị trường London."
+    elif "ASIA" in active_sessions:
+        primary = "ASIA_SESSION"
+        liquidity = "MODERATE"
+        quality_score = 70
+        recommendation = "Phiên Á: Thanh khoản mức vừa, thị trường có xu hướng tích lũy dao động hộp (Sideway)."
+    elif is_dead_zone:
+        primary = "DEAD_ZONE_NIGHT"
+        liquidity = "LOW"
+        quality_score = 40
+        recommendation = "Vùng thanh khoản mỏng ban đêm: Cẩn trọng râu quét stop-loss và bẫy giá giả (False Breakout)."
+    else:
+        primary = "OFF_PEAK"
+        liquidity = "MODERATE"
+        quality_score = 65
+        recommendation = "Phiên giao dịch bình thường."
+
+    if is_weekend:
+        liquidity = "WEEKEND_LOW"
+        quality_score = max(quality_score - 20, 30)
+        recommendation += " Lưu ý: Cuối tuần dòng tiền tổ chức giảm mạnh."
+
+    return {
+        "session": primary,
+        "active_sessions": active_sessions,
+        "liquidity": liquidity,
+        "quality_score": quality_score,
+        "is_dead_zone": is_dead_zone,
+        "is_weekend": is_weekend,
+        "utc_time": now.strftime("%H:%M UTC"),
+        "vn_time": (now + timedelta(hours=7)).strftime("%H:%M VN"),
+        "recommendation": recommendation
+    }
+
 class QuantEngine:
     """
     Computes all technical indicators for market data and validates data sufficiency.
@@ -423,10 +552,12 @@ class QuantEngine:
         ema200 = calculate_ema(closes, 200) if n >= 200 else [None] * n
 
         rsi14 = calculate_rsi(closes, 14)
+        stoch_rsi = calculate_stoch_rsi(closes, 14, 14, 3, 3)
         macd = calculate_macd(closes, 12, 26, 9)
         bb = calculate_bollinger_bands(closes, 20, 2.0)
         atr14 = calculate_atr(highs, lows, closes, 14)
         adx = calculate_adx(highs, lows, closes, 14)
+        session_info = detect_market_session()
 
         # Volume ratio = current volume / 20-period volume SMA
         vol_sma20 = calculate_sma(volumes, 20)
@@ -442,6 +573,9 @@ class QuantEngine:
             "ema50": ema50[-1],
             "ema200": ema200[-1],
             "rsi14": rsi14[-1],
+            "stoch_rsi_k": round(stoch_rsi["k"][-1], 2) if stoch_rsi["k"][-1] is not None else None,
+            "stoch_rsi_d": round(stoch_rsi["d"][-1], 2) if stoch_rsi["d"][-1] is not None else None,
+            "stoch_rsi_raw": round(stoch_rsi["stoch_rsi"][-1], 2) if stoch_rsi["stoch_rsi"][-1] is not None else None,
             "macd": macd["macd"][-1],
             "macd_signal": macd["signal"][-1],
             "macd_hist": macd["histogram"][-1],
@@ -453,7 +587,8 @@ class QuantEngine:
             "adx": adx["adx"][-1],
             "plus_di": adx["plus_di"][-1],
             "minus_di": adx["minus_di"][-1],
-            "volume_ratio": volume_ratio
+            "volume_ratio": volume_ratio,
+            "market_session": session_info
         }
 
         return {
@@ -463,6 +598,8 @@ class QuantEngine:
                 "ema21": ema21,
                 "ema50": ema50,
                 "rsi14": rsi14,
+                "stoch_rsi_k": stoch_rsi["k"],
+                "stoch_rsi_d": stoch_rsi["d"],
                 "macd": macd,
                 "bb": bb,
                 "atr14": atr14,

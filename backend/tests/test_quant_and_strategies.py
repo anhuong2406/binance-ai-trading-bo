@@ -35,6 +35,10 @@ def test_quant_engine_calculation_correctness():
     assert latest["ema50"] is not None
     assert latest["rsi14"] is not None
     assert latest["rsi14"] > 70  # Strong uptrend should show high RSI
+    assert latest["stoch_rsi_k"] is not None
+    assert latest["stoch_rsi_d"] is not None
+    assert latest["market_session"] is not None
+    assert "session" in latest["market_session"]
     assert latest["adx"] is not None
     assert latest["volume_ratio"] == 1.0
 
@@ -90,3 +94,28 @@ def test_quant_engine_mtf_alignment():
     )
     assert res_counter["allow_buy"] is False
     assert res_counter["alignment"] == "COUNTER_TREND"
+
+def test_stoch_rsi_and_session_filter():
+    from app.trading.quant_engine import calculate_stoch_rsi, detect_market_session
+    from datetime import datetime, timezone
+
+    # StochRSI on 50 candles
+    closes = [100.0 + (i % 10) * 0.5 for i in range(50)]
+    stoch = calculate_stoch_rsi(closes)
+    assert len(stoch["k"]) == 50
+    assert len(stoch["d"]) == 50
+    valid_k = [x for x in stoch["k"] if x is not None]
+    assert len(valid_k) > 0
+    assert 0.0 <= valid_k[-1] <= 100.0
+
+    # Dead zone session check (22:00 UTC = 05:00 VN)
+    dead_time = datetime(2026, 10, 23, 22, 0, tzinfo=timezone.utc)
+    res_dead = detect_market_session(dead_time)
+    assert res_dead["is_dead_zone"] is True
+    assert res_dead["liquidity"] == "LOW"
+
+    # US Peak session check (15:00 UTC = 22:00 VN)
+    us_time = datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc)
+    res_us = detect_market_session(us_time)
+    assert res_us["is_dead_zone"] is False
+    assert res_us["liquidity"] in ("HIGH", "PEAK")

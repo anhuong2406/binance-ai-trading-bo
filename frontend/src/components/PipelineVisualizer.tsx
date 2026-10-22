@@ -50,8 +50,8 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       name: 'Quant Engine',
       icon: Cpu,
       details: steps.quant_engine
-        ? `RSI: ${steps.quant_engine.indicators?.rsi14?.toFixed(1)} | ADX: ${steps.quant_engine.indicators?.adx?.toFixed(1)}`
-        : 'EMA / RSI / MACD / BB',
+        ? `RSI: ${steps.quant_engine.indicators?.rsi14?.toFixed(0)} | Stoch: ${steps.quant_engine.indicators?.stoch_rsi_k?.toFixed(0) ?? 'N/A'}%`
+        : 'EMA / RSI / Stoch / BB',
     },
     {
       key: 'gemini_analyst',
@@ -167,6 +167,20 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
           </div>
           <span className="text-gray-400 text-[11px] self-end sm:self-auto">
             Đồng thuận: <strong className="text-gray-200">{steps.mtf_alignment.alignment_strength}/100</strong>
+          </span>
+        </div>
+      )}
+
+      {/* Global Market Session Indicator */}
+      {steps.quant_engine?.indicators?.market_session && (
+        <div className="mt-2 p-2 rounded-lg bg-bg-card/40 border border-bg-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] font-mono text-gray-400">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-300 font-bold">🌍 Phiên {steps.quant_engine.indicators.market_session.session}</span>
+            <span className="text-gray-500">({steps.quant_engine.indicators.market_session.vn_time})</span>
+            <span className="text-gray-400 hidden sm:inline">— {steps.quant_engine.indicators.market_session.recommendation}</span>
+          </div>
+          <span className="text-bloomberg-cyan text-[10px]">
+            Chất lượng phiên: <strong>{steps.quant_engine.indicators.market_session.quality_score}/100</strong>
           </span>
         </div>
       )}

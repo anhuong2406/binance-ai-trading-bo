@@ -150,6 +150,25 @@ class SkillSelector:
                 f"Tuyệt đối KHÔNG BUY nếu khung 1H đang GIẢM để tránh bắt dao rơi!"
             )
 
+        if "stoch_rsi" in quant_results:
+            sr = quant_results["stoch_rsi"]
+            k = sr.get("k")
+            d = sr.get("d")
+            stoch_status = "OVERSOLD (QUÁ BÁN)" if (k and k < 20) else ("OVERBOUGHT (QUÁ MUA)" if (k and k > 80) else "NEUTRAL")
+            bullish_cross = bool(k and d and k > d and k < 35)
+            guidelines.append(
+                f"[STOCHASTIC RSI (%K={k}, %D={d})]: Trạng thái {stoch_status}. "
+                f"{'Có tín hiệu đảo chiều tăng sớm (%K cắt lên %D vùng quá bán)!' if bullish_cross else ''}"
+            )
+
+        if "market_session" in quant_results:
+            ms = quant_results["market_session"]
+            guidelines.append(
+                f"[MARKET SESSION & LIQUIDITY]: Hiện tại là {ms.get('session')} ({ms.get('vn_time')}). "
+                f"Thanh khoản: {ms.get('liquidity')} (Điểm chất lượng phiên: {ms.get('quality_score')}/100). "
+                f"Lưu ý: {ms.get('recommendation')}"
+            )
+
         guidelines.append(
             "YÊU CẦU CHIẾN LƯỢC: Nếu Regime là RANGING_HIGH_VOL (Q4 Choppy Chaos) hoặc Choppiness Index > 61.8, "
             "bắt buộc ưu tiên đề xuất HOLD để tránh bị quét stop loss trong vùng giật hỗn loạn."
@@ -191,6 +210,15 @@ class SkillSelector:
                 f"  - QUY TẮC THẨM ĐỊNH: Nếu Gemini đề xuất BUY nhưng allow_buy = False hoặc khung lớn 1H đang là DOWNTREND/BEARISH, "
                 f"bạn BẮT BUỘC PHẢI REJECT hoặc yêu cầu HOLD để bảo vệ vốn khỏi xu hướng giảm lớn."
             )
+
+        if "market_session" in quant_results:
+            ms = quant_results["market_session"]
+            if ms.get("is_dead_zone") or ms.get("quality_score", 100) < 50:
+                guidelines.append(
+                    f"[SESSION FILTER VETO]: Đang trong {ms.get('session')} ({ms.get('vn_time')}) với thanh khoản mỏng. "
+                    f"Nếu Gemini đề xuất BUY mà không có volume bùng nổ, "
+                    f"bạn BẮT BUỘC PHẢI VETO/HOLD để tránh bẫy râu quét stop-loss ban đêm."
+                )
 
         guidelines.append(
             "YÊU CẦU THẨM ĐỊNH RỦI RO: Phải đối chiếu khoảng cách Stop Loss với biến động ATR thực tế. "

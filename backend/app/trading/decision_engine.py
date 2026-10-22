@@ -160,6 +160,15 @@ class DecisionEngine:
         if mtf_alignment and mtf_alignment.get("alignment") != "UNKNOWN":
             quant_skills["multi_timeframe_alignment"] = mtf_alignment
 
+        if "market_session" in indicators.get("latest", {}):
+            quant_skills["market_session"] = indicators["latest"]["market_session"]
+
+        if "stoch_rsi_k" in indicators.get("latest", {}):
+            quant_skills["stoch_rsi"] = {
+                "k": indicators["latest"]["stoch_rsi_k"],
+                "d": indicators["latest"]["stoch_rsi_d"]
+            }
+
         gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
         gpt_skills_prompt = skill_selector.get_gpt_skills_prompt(quant_skills)
         skill_audit.set_last_cycle_skills(list(quant_skills.keys()))
@@ -220,6 +229,18 @@ class DecisionEngine:
             consensus.reason = (
                 f"Multi-Timeframe Veto: Khung 1h đang {mtf_alignment.get('alignment', 'COUNTER_TREND')} "
                 f"({mtf_alignment.get('note', '')}). Tự động khóa lệnh BUY ngược xu hướng lớn để bảo vệ vốn."
+            )
+
+        # Market Session Guard (Dead Zone Low Liquidity)
+        session_info = indicators.get("latest", {}).get("market_session", {})
+        vol_ratio = indicators.get("latest", {}).get("volume_ratio", 1.0)
+        if consensus.approved and consensus.action == "BUY" and session_info.get("is_dead_zone") and vol_ratio < 1.3:
+            consensus.approved = False
+            consensus.action = "HOLD"
+            consensus.reason = (
+                f"Session Guard Veto: Đang trong {session_info.get('session')} ({session_info.get('vn_time')}) "
+                f"thanh khoản mỏng và volume chưa bùng nổ (Volume Ratio = {vol_ratio:.2f}x < 1.3x). "
+                f"Tự động giữ trạng thái HOLD để tránh bẫy râu quét ban đêm."
             )
 
         pipeline_log["steps"]["consensus"] = {
