@@ -20,7 +20,13 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
 
   const getStepStatus = (stepKey: string) => {
     const data = steps[stepKey];
-    if (!data) return { status: 'IDLE', color: 'border-gray-800 text-gray-500 bg-bg-card' };
+    const isHoldAction = steps.gemini_analyst?.output?.action === 'HOLD';
+    if (!data) {
+      if (isHoldAction && (stepKey === 'risk_engine' || stepKey === 'execution')) {
+        return { status: 'PASS', color: 'border-cyan-500/40 text-cyan-400 bg-cyan-950/20' };
+      }
+      return { status: 'IDLE', color: 'border-gray-800 text-gray-500 bg-bg-card' };
+    }
     if (data.status === 'PASS') {
       return { status: 'PASS', color: 'border-bloomberg-green/50 text-bloomberg-green bg-bloomberg-green/10' };
     }
@@ -69,8 +75,12 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       icon: ShieldCheck,
       details: steps.risk_engine
         ? steps.risk_engine.passed
-          ? `PASS (Risk ${steps.risk_engine.calculated_risk_percent}%)`
+          ? steps.gemini_analyst?.output?.action === 'HOLD'
+            ? 'BẢO TOÀN VỐN (0% RỦI RO)'
+            : `PASS (Risk ${steps.risk_engine.calculated_risk_percent}%)`
           : 'TỪ CHỐI RỦI RO'
+        : steps.gemini_analyst?.output?.action === 'HOLD'
+        ? 'Bảo toàn vốn (HOLD)'
         : 'Quy tắc vốn & Drawdown',
     },
     {
@@ -78,7 +88,11 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       name: 'Execution',
       icon: Send,
       details: steps.execution
-        ? `${steps.execution.mode}: ${steps.execution.result?.status || 'DONE'}`
+        ? steps.gemini_analyst?.output?.action === 'HOLD'
+          ? 'STANDBY (0 LỆNH)'
+          : `${steps.execution.mode}: ${steps.execution.result?.status || 'DONE'}`
+        : steps.gemini_analyst?.output?.action === 'HOLD'
+        ? 'Standby (0 Lệnh)'
         : 'Khớp lệnh Spot',
     },
   ];

@@ -22,9 +22,16 @@ interface AIPipelinePageProps {
 export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) => {
   const [logs, setLogs] = useState<AIAnalysisLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AIAnalysisLog | null>(null);
+  const [currentReport, setCurrentReport] = useState<any>(lastReport);
   const [analyzingSymbol, setAnalyzingSymbol] = useState('BTCUSDT');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lastReport) {
+      setCurrentReport(lastReport);
+    }
+  }, [lastReport]);
 
   const loadLogs = async () => {
     try {
@@ -47,6 +54,9 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
       setIsAnalyzing(true);
       setError(null);
       const res = await api.triggerAIAnalyze(analyzingSymbol);
+      if (res?.result?.pipeline) {
+        setCurrentReport(res.result.pipeline);
+      }
       await loadLogs();
     } catch (err: any) {
       setError(err.message || 'Lỗi khi gọi phân tích đa tác nhân');
@@ -99,8 +109,24 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
         </div>
       )}
 
+      {/* Informational Banner on Pipeline Status */}
+      {selectedLog?.consensus_action === 'HOLD' && (
+        <div className="p-3 bg-cyan-950/30 border border-cyan-700/40 rounded-lg text-xs font-mono text-cyan-200 flex items-start gap-2.5">
+          <Scale className="w-4 h-4 text-bloomberg-cyan shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold text-bloomberg-cyan">
+              Chu kỳ phân tích hoàn tất: Đồng thuận ĐỨNG NGOÀI (HOLD)
+            </span>
+            <p className="text-2xs text-gray-400">
+              Cả hai AI (Gemini Analyst & GPT-6 Luna) nhận diện thị trường đang trong xu hướng giảm hoặc không đạt tỷ lệ Lợi nhuận / Rủi ro (R:R &gt;= 1.8).
+              Trong giao dịch Spot, hệ thống <strong>chủ động dừng lệnh mua để bảo toàn vốn tuyệt đối</strong>, tránh bẫy bắt dao rơi. Lệnh chỉ chuyển sang bước Khớp Lệnh khi thị trường hình thành điểm mua an toàn.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Pipeline Visualizer Component */}
-      <PipelineVisualizer lastReport={lastReport} />
+      <PipelineVisualizer lastReport={currentReport || lastReport} />
 
       {/* Dual AI Debate Card for Selected Log */}
       {selectedLog ? (

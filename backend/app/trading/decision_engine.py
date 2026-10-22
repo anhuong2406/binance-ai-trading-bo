@@ -179,6 +179,17 @@ class DecisionEngine:
         await session.commit()
 
         if not consensus.approved:
+            pipeline_log["steps"]["risk_engine"] = {
+                "status": "PASS",
+                "passed": True,
+                "reasons": ["Đứng ngoài thị trường bảo toàn vốn (Trạng thái HOLD). Không phát sinh rủi ro vị thế."],
+                "calculated_risk_percent": 0.0
+            }
+            pipeline_log["steps"]["execution"] = {
+                "status": "PASS",
+                "mode": mode,
+                "result": {"status": "STANDBY", "action": "HOLD", "message": "Giữ trạng thái quan sát, không mở vị thế bừa bãi."}
+            }
             return {"status": "HOLD", "reason": consensus.reason, "pipeline": pipeline_log}
 
         # Step 6: Risk Engine
