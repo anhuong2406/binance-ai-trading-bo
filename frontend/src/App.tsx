@@ -6,13 +6,15 @@ import {
   ShieldCheck,
   BarChart,
   Settings,
-  AlertTriangle
+  AlertTriangle,
+  Boxes
 } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { LiveUnlockModal } from './components/LiveUnlockModal';
 import { OverviewPage } from './pages/OverviewPage';
 import { TradingPage } from './pages/TradingPage';
 import { AIPipelinePage } from './pages/AIPipelinePage';
+import { TradingSkillsPage } from './pages/TradingSkillsPage';
 import { RiskControlPage } from './pages/RiskControlPage';
 import { BacktestPage } from './pages/BacktestPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -20,7 +22,7 @@ import { SystemStatus, SpotAccount, Position, TradingMode } from './types';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'trading' | 'ai' | 'risk' | 'backtest' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trading' | 'ai' | 'skills' | 'risk' | 'backtest' | 'settings'>('overview');
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [account, setAccount] = useState<SpotAccount | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -246,6 +248,18 @@ export const App: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('skills')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition ${
+            activeTab === 'skills'
+              ? 'bg-bg-card text-bloomberg-orange font-bold border border-bg-border'
+              : 'text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          <span>Trading Skills</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('risk')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition ${
             activeTab === 'risk'
@@ -297,6 +311,7 @@ export const App: React.FC = () => {
           <TradingPage positions={positions} onClosePosition={handleClosePosition} />
         )}
         {activeTab === 'ai' && <AIPipelinePage lastReport={lastReport} />}
+        {activeTab === 'skills' && <TradingSkillsPage />}
         {activeTab === 'risk' && <RiskControlPage />}
         {activeTab === 'backtest' && <BacktestPage />}
         {activeTab === 'settings' && <SettingsPage />}

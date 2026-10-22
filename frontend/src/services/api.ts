@@ -212,5 +212,48 @@ export const api = {
       throw new Error(err.detail || 'Lỗi thực thi backtest');
     }
     return res.json();
+  },
+
+  // Trading Skills (Claude Trading Skills Engine)
+  async getSkillsList(): Promise<any> {
+    const res = await fetch(`${BASE_URL}/skills/list`);
+    if (!res.ok) throw new Error('Không thể tải danh sách trading skills');
+    return res.json();
+  },
+
+  async toggleSkill(skill_name: string, enabled: boolean): Promise<any> {
+    const res = await fetch(`${BASE_URL}/skills/toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill_name, enabled })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Lỗi bật/tắt skill');
+    }
+    return res.json();
+  },
+
+  async getSkillsAudit(limit = 50): Promise<any> {
+    const res = await fetch(`${BASE_URL}/skills/audit?limit=${limit}`);
+    if (!res.ok) throw new Error('Không thể tải nhật ký audit skills');
+    return res.json();
+  },
+
+  async compareSkillsModes(): Promise<any> {
+    const res = await fetch(`${BASE_URL}/skills/compare`);
+    if (!res.ok) throw new Error('Không thể tải dữ liệu so sánh chế độ');
+    return res.json();
+  },
+
+  async testQuantSkills(symbol = 'BTCUSDT'): Promise<any> {
+    const res = await fetch(`${BASE_URL}/skills/test-quant?symbol=${symbol}`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Lỗi kiểm tra công cụ định lượng');
+    }
+    return res.json();
   }
 };

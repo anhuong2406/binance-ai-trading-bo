@@ -13,7 +13,7 @@ from app.config.settings import settings
 from app.database.session import init_db, AsyncSessionLocal, record_audit
 from app.api import (
     system_router, binance_router, ai_router,
-    trading_router, risk_router, backtest_router, ws_manager
+    trading_router, risk_router, backtest_router, skills_router, ws_manager
 )
 from app.scheduler.controller import trading_controller
 
@@ -65,6 +65,7 @@ app.include_router(ai_router)
 app.include_router(trading_router)
 app.include_router(risk_router)
 app.include_router(backtest_router)
+app.include_router(skills_router)
 
 # Live WebSocket endpoint
 @app.websocket("/ws/live")

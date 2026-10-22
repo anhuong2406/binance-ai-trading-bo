@@ -47,9 +47,11 @@ class GPTIndependentReviewer:
         gemini_proposal: Dict[str, Any],
         market_snapshot: Dict[str, Any],
         indicators: Dict[str, Any],
-        model_id: Optional[str] = None
+        model_id: Optional[str] = None,
+        skills_context: Optional[Dict[str, Any]] = None,
+        skills_prompt: Optional[str] = None
     ) -> Tuple[Dict[str, Any], int, Dict[str, int]]:
-        """Conduct independent review of Gemini's trading proposal."""
+        """Conduct independent review of Gemini's trading proposal with risk trading skills."""
         target_model = model_id or settings.GPT_MODEL_ID
 
         review_payload = {
@@ -58,8 +60,16 @@ class GPTIndependentReviewer:
             "market_snapshot": market_snapshot,
             "quant_indicators": indicators.get("latest", {})
         }
+        if skills_context:
+            review_payload["trading_skills_risk_metrics"] = skills_context
 
-        user_prompt = f"Hồ sơ thẩm định giao dịch cho {symbol}:\n{json.dumps(review_payload, ensure_ascii=False)}"
+        prompt_parts = [
+            f"Hồ sơ thẩm định giao dịch cho {symbol}:\n{json.dumps(review_payload, ensure_ascii=False)}"
+        ]
+        if skills_prompt:
+            prompt_parts.append(f"\nCHỈ DẪN KỸ NĂNG THẨM ĐỊNH RỦI RO (CLAUDE TRADING SKILLS):\n{skills_prompt}")
+
+        user_prompt = "\n".join(prompt_parts)
 
         data, latency_ms, usage = await self.gateway.complete_chat(
             model_id=target_model,

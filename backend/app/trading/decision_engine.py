@@ -23,6 +23,7 @@ from app.ai.consensus import DecisionConsensus, ConsensusResult
 from app.database.models import AIAnalysisLog, RiskEvaluation
 from app.database.session import record_audit
 from app.config.settings import settings
+from app.skills import skill_selector, skill_audit
 
 class DecisionEngine:
     def __init__(self, binance_client: BinanceSpotClient):
@@ -88,14 +89,40 @@ class DecisionEngine:
             for c in candles[-10:]
         ]
 
-        # Step 3: Gemini Market Analyst
+        # Step 2.5: Trading Skills Engine (Claude Trading Skills Integration)
+        t_skills_start = time.time()
+        order_book_data = None
+        try:
+            order_book_data = await self.binance_client.get_order_book(symbol, limit=10)
+        except Exception:
+            pass
+
+        quant_skills = skill_selector.execute_and_bundle_quant_skills(
+            candles=candles,
+            order_book=order_book_data,
+            allocated_capital=settings.BOT_ALLOCATED_CAPITAL_USDT
+        )
+        gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
+        gpt_skills_prompt = skill_selector.get_gpt_skills_prompt(quant_skills)
+        skill_audit.set_last_cycle_skills(list(quant_skills.keys()))
+
+        pipeline_log["steps"]["trading_skills"] = {
+            "status": "PASS",
+            "skills_applied": list(quant_skills.keys()),
+            "duration_ms": round((time.time() - t_skills_start) * 1000, 2),
+            "data": quant_skills
+        }
+
+        # Step 3: Gemini Market Analyst (with Trading Skills Context)
         try:
             gemini_out, gemini_ms, gemini_usage = await self.gemini_analyst.analyze(
                 symbol=symbol,
                 timeframe=timeframe,
                 market_snapshot=snapshot,
                 indicators=indicators,
-                recent_candles_summary=recent_summary
+                recent_candles_summary=recent_summary,
+                skills_context=quant_skills,
+                skills_prompt=gemini_skills_prompt
             )
             pipeline_log["steps"]["gemini_analyst"] = {
                 "status": "PASS",
@@ -106,13 +133,15 @@ class DecisionEngine:
             pipeline_log["steps"]["gemini_analyst"] = {"status": "FAIL", "error": str(e)}
             return {"status": "ABORTED", "reason": f"Lỗi Gemini Analyst: {str(e)}", "pipeline": pipeline_log}
 
-        # Step 4: GPT-6 Luna Independent Reviewer (Luôn luôn thẩm định độc lập)
+        # Step 4: GPT-6 Luna Independent Reviewer (with Risk Skills Context)
         try:
             gpt_out, gpt_ms, gpt_usage = await self.gpt_reviewer.review(
                 symbol=symbol,
                 gemini_proposal=gemini_out,
                 market_snapshot=snapshot,
-                indicators=indicators
+                indicators=indicators,
+                skills_context=quant_skills,
+                skills_prompt=gpt_skills_prompt
             )
             pipeline_log["steps"]["gpt_reviewer"] = {
                 "status": "PASS",

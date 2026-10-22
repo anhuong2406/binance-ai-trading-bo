@@ -48,9 +48,11 @@ class GeminiMarketAnalyst:
         market_snapshot: Dict[str, Any],
         indicators: Dict[str, Any],
         recent_candles_summary: Dict[str, Any],
-        model_id: Optional[str] = None
+        model_id: Optional[str] = None,
+        skills_context: Optional[Dict[str, Any]] = None,
+        skills_prompt: Optional[str] = None
     ) -> Tuple[Dict[str, Any], int, Dict[str, int]]:
-        """Run market analysis using Gemini model."""
+        """Run market analysis using Gemini model with enhanced trading skills."""
         target_model = model_id or settings.GEMINI_MODEL_ID
 
         user_content = {
@@ -60,8 +62,16 @@ class GeminiMarketAnalyst:
             "indicators": indicators.get("latest", {}),
             "recent_candles": recent_candles_summary
         }
+        if skills_context:
+            user_content["trading_skills_quantitative_metrics"] = skills_context
 
-        user_prompt = f"Dữ liệu thị trường mới nhất cho {symbol} ({timeframe}):\n{json.dumps(user_content, ensure_ascii=False)}"
+        prompt_parts = [
+            f"Dữ liệu thị trường mới nhất cho {symbol} ({timeframe}):\n{json.dumps(user_content, ensure_ascii=False)}"
+        ]
+        if skills_prompt:
+            prompt_parts.append(f"\nCHỈ DẪN KỸ NĂNG ĐỊNH LƯỢNG (CLAUDE TRADING SKILLS):\n{skills_prompt}")
+
+        user_prompt = "\n".join(prompt_parts)
 
         data, latency_ms, usage = await self.gateway.complete_chat(
             model_id=target_model,
