@@ -1,0 +1,47 @@
+[
+  {
+    "symbol": "BTCUSDT",
+    "name": "Bitcoin",
+    "base_asset": "BTC",
+    "quote_asset": "USDT",
+    "enabled": true,
+    "min_notional": 5.0,
+    "is_default": true
+  },
+  {
+    "symbol": "ETHUSDT",
+    "name": "Ethereum",
+    "base_asset": "ETH",
+    "quote_asset": "USDT",
+    "enabled": true,
+    "min_notional": 5.0,
+    "is_default": true
+  },
+  {
+    "symbol": "SOLUSDT",
+    "name": "Solana",
+    "base_asset": "SOL",
+    "quote_asset": "USDT",
+    "enabled": true,
+    "min_notional": 5.0,
+    "is_default": true
+  },
+  {
+    "symbol": "DOGEUSDT",
+    "name": "Dogecoin",
+    "base_asset": "DOGE",
+    "quote_asset": "USDT",
+    "enabled": true,
+    "min_notional": 1.0,
+    "is_default": true
+  },
+  {
+    "symbol": "SHIBUSDT",
+    "name": "Shiba Inu",
+    "base_asset": "SHIB",
+    "quote_asset": "USDT",
+    "enabled": true,
+    "min_notional": 1.0,
+    "is_default": false
+  }
+]
