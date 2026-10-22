@@ -12,10 +12,10 @@ export const LiveUnlockModal: React.FC<LiveUnlockModalProps> = ({
   isOpen,
   onClose,
   onUnlock,
-  defaultCapital = 100.0,
+  defaultCapital = 5.67,
 }) => {
   const [phrase, setPhrase] = useState('');
-  const [capital, setCapital] = useState(defaultCapital);
+  const [capitalText, setCapitalText] = useState(defaultCapital ? defaultCapital.toString() : '5.67');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,18 +24,19 @@ export const LiveUnlockModal: React.FC<LiveUnlockModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (phrase !== 'ENABLE LIVE SPOT') {
+    if (phrase.trim() !== 'ENABLE LIVE SPOT') {
       setError("Vui lòng nhập chính xác cụm từ: 'ENABLE LIVE SPOT'");
       return;
     }
-    if (capital <= 0) {
+    const parsedCapital = parseFloat(capitalText.replace(',', '.').trim());
+    if (isNaN(parsedCapital) || parsedCapital <= 0) {
       setError('Vốn cấp cho bot phải lớn hơn 0 USDT.');
       return;
     }
 
     try {
       setLoading(true);
-      await onUnlock(phrase, capital);
+      await onUnlock(phrase.trim(), parsedCapital);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Lỗi mở khóa LIVE SPOT');
@@ -84,24 +85,46 @@ export const LiveUnlockModal: React.FC<LiveUnlockModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-mono text-gray-300 mb-1">
-              Số vốn Spot tối đa phân bổ cho Bot (USDT):
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-mono text-gray-300">
+                Số vốn Spot tối đa phân bổ cho Bot (USDT):
+              </label>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCapitalText('5.67')}
+                  className="px-2 py-0.5 bg-bg-card hover:bg-bg-border rounded text-[11px] font-mono text-bloomberg-orange border border-bg-border transition cursor-pointer"
+                >
+                  ⚡ Điền 5.67 USDT
+                </button>
+              </div>
+            </div>
             <input
-              type="number"
-              step="any"
-              min="1"
-              value={capital}
-              onChange={(e) => setCapital(parseFloat(e.target.value) || 0)}
+              type="text"
+              inputMode="decimal"
+              value={capitalText}
+              onChange={(e) => setCapitalText(e.target.value)}
+              placeholder="VD: 5.67 hoặc 5,67"
               className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-sm text-gray-100 font-mono focus:outline-none focus:border-bloomberg-orange"
             />
+            <p className="text-[10px] text-gray-400 mt-1 font-mono">
+              Hỗ trợ cả dấu chấm (.) và dấu phẩy (,) như 5.67 hoặc 5,67
+            </p>
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-gray-300 mb-1">
-              Nhập chính xác cụm từ xác nhận:{' '}
-              <span className="text-bloomberg-orange font-bold select-all">ENABLE LIVE SPOT</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-mono text-gray-300">
+                Nhập chính xác cụm từ xác nhận:
+              </label>
+              <button
+                type="button"
+                onClick={() => setPhrase('ENABLE LIVE SPOT')}
+                className="text-[11px] font-mono text-bloomberg-orange hover:underline cursor-pointer"
+              >
+                (Bấm để tự điền)
+              </button>
+            </div>
             <input
               type="text"
               placeholder="ENABLE LIVE SPOT"

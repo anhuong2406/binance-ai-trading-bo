@@ -30,7 +30,7 @@ export const SettingsPage: React.FC = () => {
   const [binanceApiSecret, setBinanceApiSecret] = useState('');
   const [binanceTestnetKey, setBinanceTestnetKey] = useState('');
   const [binanceTestnetSecret, setBinanceTestnetSecret] = useState('');
-  const [allocatedCapital, setAllocatedCapital] = useState(100.0);
+  const [allocatedCapital, setAllocatedCapital] = useState<string | number>(100.0);
   const [evalInterval, setEvalInterval] = useState(300);
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export const SettingsPage: React.FC = () => {
         ai_base_url: aiBaseUrl,
         gpt_model_id: gptModelId,
         gemini_model_id: geminiModelId,
-        bot_allocated_capital: allocatedCapital,
+        bot_allocated_capital: parseFloat(String(allocatedCapital).replace(',', '.')),
         evaluation_interval_seconds: evalInterval,
       };
 
@@ -302,11 +302,11 @@ export const SettingsPage: React.FC = () => {
             <div>
               <label className="block text-gray-400 mb-1">Vốn Spot phân bổ cho Bot (USDT):</label>
               <input
-                type="number"
-                step="any"
-                min="1"
+                type="text"
+                inputMode="decimal"
                 value={allocatedCapital}
-                onChange={(e) => setAllocatedCapital(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setAllocatedCapital(e.target.value)}
+                placeholder="VD: 5.67 hoặc 5,67"
                 className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-gray-100 focus:outline-none"
               />
               <span className="text-[10px] text-gray-500">
