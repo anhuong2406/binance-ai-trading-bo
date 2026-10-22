@@ -303,10 +303,10 @@ export const SettingsPage: React.FC = () => {
               <label className="block text-gray-400 mb-1">Vốn Spot phân bổ cho Bot (USDT):</label>
               <input
                 type="number"
-                step="5"
-                min="10"
+                step="any"
+                min="1"
                 value={allocatedCapital}
-                onChange={(e) => setAllocatedCapital(parseFloat(e.target.value) || 10)}
+                onChange={(e) => setAllocatedCapital(parseFloat(e.target.value) || 0)}
                 className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-gray-100 focus:outline-none"
               />
               <span className="text-[10px] text-gray-500">

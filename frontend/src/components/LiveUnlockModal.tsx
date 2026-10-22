@@ -89,8 +89,8 @@ export const LiveUnlockModal: React.FC<LiveUnlockModalProps> = ({
             </label>
             <input
               type="number"
-              step="1"
-              min="10"
+              step="any"
+              min="1"
               value={capital}
               onChange={(e) => setCapital(parseFloat(e.target.value) || 0)}
               className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-sm text-gray-100 font-mono focus:outline-none focus:border-bloomberg-orange"
