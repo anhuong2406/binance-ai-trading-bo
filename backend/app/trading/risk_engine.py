@@ -177,14 +177,16 @@ class RiskEngine:
                 reasons=[f"Đang có vị thế mở cho {symbol}. Không thực hiện mua thêm (Chống nhồi lệnh Martingale)."]
             )
 
-        # 7. Max daily entries check (Max 5)
-        if stat.trade_count >= settings.MAX_DAILY_ENTRIES:
+        # 7. Max daily entries check (Dynamic: 20 for Scalping, 5 for Standard)
+        effective_max_entries = settings.SCALPING_MAX_DAILY_ENTRIES if settings.SCALPING_MODE_ENABLED else settings.MAX_DAILY_ENTRIES
+        if stat.trade_count >= effective_max_entries:
             return RiskCheckResult(
                 passed=False,
-                reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({stat.trade_count}/{settings.MAX_DAILY_ENTRIES})."]
+                reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({stat.trade_count}/{effective_max_entries})."]
             )
 
-        # 8. Cooldown check (20 mins after last closed position)
+        # 8. Cooldown check (Dynamic: 5 mins for Scalping, 20 mins for Standard)
+        effective_cooldown = settings.SCALPING_COOLDOWN_MINUTES if settings.SCALPING_MODE_ENABLED else settings.COOLDOWN_MINUTES
         last_closed_stmt = select(Position).where(
             Position.status == "CLOSED",
             Position.mode == mode
@@ -194,8 +196,8 @@ class RiskEngine:
 
         if last_closed_pos and last_closed_pos.closed_at:
             cooldown_delta = utc_now() - last_closed_pos.closed_at
-            if cooldown_delta < timedelta(minutes=settings.COOLDOWN_MINUTES):
-                remaining_mins = settings.COOLDOWN_MINUTES - int(cooldown_delta.total_seconds() / 60)
+            if cooldown_delta < timedelta(minutes=effective_cooldown):
+                remaining_mins = effective_cooldown - int(cooldown_delta.total_seconds() / 60)
                 return RiskCheckResult(
                     passed=False,
                     reasons=[f"Đang trong thời gian nghỉ Cooldown (còn {remaining_mins} phút sau lệnh đóng gần nhất)."]

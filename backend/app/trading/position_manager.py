@@ -5,10 +5,13 @@ Tracks open spot positions, triggers Stop Loss & Take Profit, updates PnL and da
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.models import Position, DailyStat
 from app.config.settings import settings
+
+logger = logging.getLogger("position_manager")
 
 def utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -149,8 +152,8 @@ class PositionManager:
                             order_type="MARKET",
                             quantity=pos.amount
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Lỗi gửi lệnh Market SELL Stop Loss trên Binance ({pos.symbol}): {e}")
 
                 # Trigger Stop Loss
                 exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
@@ -181,8 +184,8 @@ class PositionManager:
                             order_type="MARKET",
                             quantity=pos.amount
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Lỗi gửi lệnh Market SELL Take Profit trên Binance ({pos.symbol}): {e}")
 
                 # Trigger Take Profit
                 exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))

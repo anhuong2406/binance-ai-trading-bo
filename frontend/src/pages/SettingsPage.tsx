@@ -590,6 +590,11 @@ export const SettingsPage: React.FC = () => {
               <p className="text-[10px] text-gray-500 mt-1">
                 * Khuyến nghị: <strong>1.0% - 1.5%</strong>. Trừ phí sàn (~0.2%), mỗi vòng ăn ròng ~0.8% - 1.3%, tiền về ví ngay để quét lệnh mới.
               </p>
+              {parseFloat(String(targetTakeProfit)) < 0.5 && (
+                <p className="text-[10px] text-amber-400 mt-1">
+                  ⚠️ Cảnh báo: TP &lt; 0.5% có thể bị phí sàn (~0.2%) ăn mòn lợi nhuận. Nên đặt ≥ 0.8%.
+                </p>
+              )}
             </div>
 
             <div>

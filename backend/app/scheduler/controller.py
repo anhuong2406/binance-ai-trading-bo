@@ -197,7 +197,7 @@ class AutoTradingController:
                     session=session,
                     current_prices=prices,
                     mode=self.mode,
-                    execution_engine=self.execution if self.mode == "LIVE" else None
+                    execution_engine=self.decision_engine.execution if self.mode == "LIVE" else None
                 )
                 if actions:
                     for act in actions:

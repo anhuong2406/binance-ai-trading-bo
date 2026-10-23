@@ -4,7 +4,7 @@ Chief Market Analyst / Strategy Generator
 Analyzes technical indicators, market state, generates trade plan with SL/TP.
 """
 import json
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from app.ai.gateway import AIGateway
 from app.config.settings import settings
 
@@ -15,10 +15,10 @@ Yêu cầu nghiêm ngặt:
 1. Nhận diện trạng thái thị trường: TRENDING, RANGING, VOLATILE hoặc UNCERTAIN.
 2. Đánh giá sức mạnh xu hướng (0-100).
 3. Đề xuất action:
-   - "BUY": Mở vị thế Spot khi có lợi thế rõ rệt và tỷ lệ R:R >= 1.8.
+   - "BUY": Mở vị thế Spot khi có lợi thế rõ rệt.
    - "SELL": Thoát vị thế Spot nếu đang có tín hiệu đảo chiều hoặc rủi ro.
    - "HOLD": Giữ nguyên trạng thái, kiên nhẫn quan sát khi thị trường nhiễu.
-4. Nếu BUY: Bắt buộc cung cấp entry_price, stop_loss hợp lý (dưới hỗ trợ/dựa trên ATR), take_profit (ít nhất 2x rủi ro), và validity_minutes (thời hạn hiệu lực từ 15-60 phút).
+4. Nếu BUY: Bắt buộc cung cấp entry_price, stop_loss hợp lý (dưới hỗ trợ/dựa trên ATR), take_profit, và validity_minutes (thời hạn hiệu lực từ 15-60 phút).
 5. Nêu rõ ít nhất 2 điều kiện làm kế hoạch mất hiệu lực (invalidation_conditions).
 6. Viết reasoning bằng Tiếng Việt súc tích, chuyên nghiệp theo phong cách Quantitative Trading.
 7. ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN với các trường sau, KHÔNG ĐƯỢC CÓ KÝ TỰ NÀO KHÁC NGOÀI JSON:

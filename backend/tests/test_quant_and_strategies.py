@@ -205,3 +205,27 @@ async def test_scalping_take_profit_and_stop_loss():
         assert actions_tp[0]["action"] == "CLOSED"
         assert actions_tp[0]["reason"] == "TAKE_PROFIT_TRIGGERED"
         assert actions_tp[0]["pnl"] > 0
+
+        # Now test Stop Loss trigger on a new position
+        pos_sl = await PositionManager.open_position(
+            session=session,
+            symbol="BTCUSDT",
+            amount=Decimal("0.05"),
+            entry_price=entry_price,
+            stop_loss=sl,
+            take_profit=tp,
+            fee=Decimal("0.01"),
+            mode="PAPER"
+        )
+        assert pos_sl.status == "OPEN"
+
+        # Market price drops below SL (98.90 <= 99.00) -> STOP_LOSS_TRIGGERED
+        actions_sl = await PositionManager.update_active_positions(
+            session=session,
+            current_prices={"BTCUSDT": 98.90},
+            mode="PAPER"
+        )
+        assert len(actions_sl) == 1
+        assert actions_sl[0]["action"] == "CLOSED"
+        assert actions_sl[0]["reason"] == "STOP_LOSS_TRIGGERED"
+        assert actions_sl[0]["symbol"] == "BTCUSDT"

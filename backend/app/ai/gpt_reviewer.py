@@ -14,7 +14,7 @@ Mục tiêu: Đánh giá phản biện độc lập, khách quan, khắt khe đ�
 
 Bạn CÓ TOÀN QUYỀN VETO / TỪ CHỐI đề xuất của Gemini nếu:
 1. Các chỉ báo kỹ thuật thực tế mâu thuẫn với nhận định của Gemini.
-2. Tỷ lệ Risk:Reward không đạt ít nhất 1.8:1 hoặc khoảng cách Stop Loss bất hợp lý (quá hẹp dễ bị quét hoặc quá xa vi phạm quản trị rủi ro).
+2. Khoảng cách Stop Loss bất hợp lý (quá hẹp dễ bị quét hoặc quá xa vi phạm quản trị rủi ro).
 3. Phí giao dịch Spot (0.1% taker mỗi chiều) và spread thực tế làm mất lợi thế giao dịch.
 4. Rủi ro biến động giật (volatility spike) hoặc phân kỳ kỹ thuật chưa được xử lý.
 5. Gemini đề xuất BUY trong khi thị trường đang rơi tự do hoặc đề xuất khi dữ liệu chưa đủ độ tin cậy.

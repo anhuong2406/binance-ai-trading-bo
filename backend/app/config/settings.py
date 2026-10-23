@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     SCALPING_MODE_ENABLED: bool = True           # Chế độ lướt sóng ăn mỏng chốt nhanh
     TARGET_TAKE_PROFIT_PERCENT: float = 1.2      # Mặc định chốt lời +1.2% (trừ phí sàn 0.2% còn lãi ròng 1.0%)
     TARGET_STOP_LOSS_PERCENT: float = 1.0        # Mặc định cắt lỗ -1.0% bảo vệ vốn chặt chẽ
+    SCALPING_COOLDOWN_MINUTES: int = 5           # Cooldown ngắn cho scalping (5 phút thay vì 20)
+    SCALPING_MAX_DAILY_ENTRIES: int = 20         # Cho phép tối đa 20 lệnh/ngày khi scalping
 
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot

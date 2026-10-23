@@ -129,8 +129,8 @@ async def test_case_8_daily_loss_limit_reached(test_db, mock_symbol_filters):
 
 @pytest.mark.asyncio
 async def test_case_8_cooldown_period_enforced(test_db, mock_symbol_filters):
-    """Case 8: Enforces 20-minute cooldown after closing a position."""
-    # Position closed 5 minutes ago
+    """Case 8: Enforces cooldown after closing a position."""
+    # Position closed 1 minute ago (within both standard 20m and scalping cooldown)
     p_closed = Position(
         symbol="BTCUSDT",
         amount=Decimal("0.001"),
@@ -138,7 +138,7 @@ async def test_case_8_cooldown_period_enforced(test_db, mock_symbol_filters):
         current_price=Decimal("64800"),
         status="CLOSED",
         mode="PAPER",
-        closed_at=utc_now() - timedelta(minutes=5)
+        closed_at=utc_now() - timedelta(minutes=1)
     )
     test_db.add(p_closed)
     await test_db.commit()
