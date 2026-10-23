@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     MAX_AI_COST_PER_DAY: float = 5.0
     QUANT_PREFILTER_ENABLED: bool = True  # Cost optimizer: only calls LLMs when technical trigger occurs
 
+    # Scalping & Micro-Profit Settings (Tích tiểu thành đại)
+    SCALPING_MODE_ENABLED: bool = True           # Chế độ lướt sóng ăn mỏng chốt nhanh
+    TARGET_TAKE_PROFIT_PERCENT: float = 1.2      # Mặc định chốt lời +1.2% (trừ phí sàn 0.2% còn lãi ròng 1.0%)
+    TARGET_STOP_LOSS_PERCENT: float = 1.0        # Mặc định cắt lỗ -1.0% bảo vệ vốn chặt chẽ
+
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
     MAX_RISK_PER_TRADE_PERCENT: float = 1.0     # 1% max risk per trade

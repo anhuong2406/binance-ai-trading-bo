@@ -110,11 +110,12 @@ class PositionManager:
         cls,
         session: AsyncSession,
         current_prices: Dict[str, float],
-        mode: str
+        mode: str,
+        execution_engine: Any = None
     ) -> List[Dict[str, Any]]:
         """
         Evaluate all open positions against latest market prices.
-        Triggers SL / TP if breached.
+        Triggers SL / TP if breached. In LIVE mode, sends MARKET SELL to Binance.
         """
         stmt = select(Position).where(
             Position.status == "OPEN",
@@ -139,6 +140,18 @@ class PositionManager:
 
             # Check Stop Loss
             if pos.stop_loss and dec_price <= pos.stop_loss:
+                # In LIVE mode, execute real market sell on Binance
+                if execution_engine and pos.mode == "LIVE":
+                    try:
+                        await execution_engine.execute_spot_order(
+                            symbol=pos.symbol,
+                            side="SELL",
+                            order_type="MARKET",
+                            quantity=pos.amount
+                        )
+                    except Exception:
+                        pass
+
                 # Trigger Stop Loss
                 exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
                 closed = await cls.close_position(
@@ -159,6 +172,18 @@ class PositionManager:
 
             # Check Take Profit
             if pos.take_profit and dec_price >= pos.take_profit:
+                # In LIVE mode, execute real market sell on Binance
+                if execution_engine and pos.mode == "LIVE":
+                    try:
+                        await execution_engine.execute_spot_order(
+                            symbol=pos.symbol,
+                            side="SELL",
+                            order_type="MARKET",
+                            quantity=pos.amount
+                        )
+                    except Exception:
+                        pass
+
                 # Trigger Take Profit
                 exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
                 closed = await cls.close_position(

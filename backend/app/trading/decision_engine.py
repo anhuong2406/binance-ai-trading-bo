@@ -170,6 +170,14 @@ class DecisionEngine:
                 "d": indicators["latest"]["stoch_rsi_d"]
             }
 
+        if settings.SCALPING_MODE_ENABLED:
+            quant_skills["scalping_profile"] = {
+                "enabled": True,
+                "target_take_profit_percent": settings.TARGET_TAKE_PROFIT_PERCENT,
+                "target_stop_loss_percent": settings.TARGET_STOP_LOSS_PERCENT,
+                "strategy_note": f"Lướt sóng ăn mỏng: Chốt lời mục tiêu +{settings.TARGET_TAKE_PROFIT_PERCENT}%, Cắt lỗ -{settings.TARGET_STOP_LOSS_PERCENT}%"
+            }
+
         gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
         gpt_skills_prompt = skill_selector.get_gpt_skills_prompt(quant_skills)
         skill_audit.set_last_cycle_skills(list(quant_skills.keys()))
@@ -372,13 +380,36 @@ class DecisionEngine:
                 "maxPrice": Decimal("1000000")
             }
 
+        # Determine effective entry, stop loss, and take profit (with Scalping Micro-Profit logic)
+        effective_entry = consensus.entry_price or float(snapshot["lastPrice"])
+        effective_sl = consensus.stop_loss
+        effective_tp = consensus.take_profit
+
+        if consensus.action == "BUY" and settings.SCALPING_MODE_ENABLED:
+            target_tp_rate = settings.TARGET_TAKE_PROFIT_PERCENT / 100.0
+            target_sl_rate = settings.TARGET_STOP_LOSS_PERCENT / 100.0
+            scalp_tp = round(effective_entry * (1.0 + target_tp_rate), 8)
+            scalp_sl = round(effective_entry * (1.0 - target_sl_rate), 8)
+
+            # Cap TP to scalping target so profits are realized quickly (+1.2%)
+            if effective_tp:
+                effective_tp = min(effective_tp, scalp_tp)
+            else:
+                effective_tp = scalp_tp
+
+            # Enforce tighter stop loss for micro-scalping
+            if effective_sl:
+                effective_sl = max(effective_sl, scalp_sl)
+            else:
+                effective_sl = scalp_sl
+
         risk_check: RiskCheckResult = await risk_engine.evaluate_trade(
             session=session,
             symbol=symbol,
             action=consensus.action,
-            entry_price=consensus.entry_price or snapshot["lastPrice"],
-            stop_loss=consensus.stop_loss,
-            take_profit=consensus.take_profit,
+            entry_price=effective_entry,
+            stop_loss=effective_sl,
+            take_profit=effective_tp,
             allocated_capital=allocated_capital,
             available_usdt=avail_usdt,
             symbol_filters=filters,
@@ -391,9 +422,9 @@ class DecisionEngine:
         risk_eval = RiskEvaluation(
             symbol=symbol,
             action=consensus.action,
-            proposed_entry=consensus.entry_price,
-            proposed_sl=consensus.stop_loss,
-            proposed_tp=consensus.take_profit,
+            proposed_entry=effective_entry,
+            proposed_sl=effective_sl,
+            proposed_tp=effective_tp,
             passed=risk_check.passed,
             rejection_reasons=json.dumps(risk_check.reasons, ensure_ascii=False),
             calculated_risk_percent=risk_check.calculated_risk_percent,
@@ -411,8 +442,8 @@ class DecisionEngine:
 
         # Step 7: Execution Engine / Paper Simulator
         market_price = Decimal(str(snapshot["lastPrice"]))
-        sl_dec = Decimal(str(consensus.stop_loss)) if consensus.stop_loss else None
-        tp_dec = Decimal(str(consensus.take_profit)) if consensus.take_profit else None
+        sl_dec = Decimal(str(effective_sl)) if effective_sl else None
+        tp_dec = Decimal(str(effective_tp)) if effective_tp else None
 
         if mode == "PAPER":
             exec_res = await paper_simulator.execute_paper_order(

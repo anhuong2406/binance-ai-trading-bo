@@ -11,7 +11,9 @@ import {
   Save,
   Activity,
   Plus,
-  Trash2
+  Trash2,
+  Zap,
+  Target
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -35,6 +37,9 @@ export const SettingsPage: React.FC = () => {
   const [allocatedCapital, setAllocatedCapital] = useState<string | number>(100.0);
   const [evalInterval, setEvalInterval] = useState(300);
   const [quantPrefilter, setQuantPrefilter] = useState(true);
+  const [scalpingMode, setScalpingMode] = useState(true);
+  const [targetTakeProfit, setTargetTakeProfit] = useState<string | number>(1.2);
+  const [targetStopLoss, setTargetStopLoss] = useState<string | number>(1.0);
 
   // Trading Pairs State
   const [pairs, setPairs] = useState<any[]>([]);
@@ -61,6 +66,9 @@ export const SettingsPage: React.FC = () => {
       setAllocatedCapital(s.bot_allocated_capital || 100.0);
       setEvalInterval(s.evaluation_interval_seconds || 300);
       setQuantPrefilter(s.quant_prefilter_enabled !== false);
+      setScalpingMode(s.scalping_mode_enabled !== false);
+      setTargetTakeProfit(s.target_take_profit_percent !== undefined ? s.target_take_profit_percent : 1.2);
+      setTargetStopLoss(s.target_stop_loss_percent !== undefined ? s.target_stop_loss_percent : 1.0);
     });
     loadPairs();
   }, []);
@@ -151,6 +159,9 @@ export const SettingsPage: React.FC = () => {
         bot_allocated_capital: parseFloat(String(allocatedCapital).replace(',', '.')),
         evaluation_interval_seconds: evalInterval,
         quant_prefilter_enabled: quantPrefilter,
+        scalping_mode_enabled: scalpingMode,
+        target_take_profit_percent: parseFloat(String(targetTakeProfit).replace(',', '.')),
+        target_stop_loss_percent: parseFloat(String(targetStopLoss).replace(',', '.')),
       };
 
       if (aiApiKey) payload.ai_api_key = aiApiKey;
@@ -523,6 +534,85 @@ export const SettingsPage: React.FC = () => {
           >
             <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
           </button>
+        </div>
+
+        {/* Scalping & Micro-Profit Settings (Tích tiểu thành đại) */}
+        <div className="bg-bg-darker p-4 rounded-lg border border-bg-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-bg-border gap-2">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-950/60 border border-bloomberg-orange/40 flex items-center justify-center shrink-0">
+                <Zap className="w-5 h-5 text-bloomberg-orange" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-mono text-xs font-bold uppercase text-gray-200">
+                    Chế Độ Lướt Sóng Siêu Ngắn (Scalping & Take Profit Vi Mô)
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600/40">
+                    Tích Tiểu Thành Đại
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                  Mua đi bán lại liên tục trong các nhịp nảy sóng ngắn, chốt lời nhanh ở mức lãi nhỏ (+1.0% ~ +1.5%) để quay vòng vốn liên tục thay vì gồng chờ đỉnh xa.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setScalpingMode(!scalpingMode)}
+              className={`w-12 h-6 flex items-center rounded-full p-1 transition cursor-pointer shrink-0 ${
+                scalpingMode ? 'bg-bloomberg-orange justify-end' : 'bg-gray-700 justify-start'
+              }`}
+              title="Bật/Tắt chế độ Scalping ăn mỏng chốt nhanh"
+            >
+              <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono pt-1">
+            <div>
+              <label className="block text-gray-300 font-bold mb-1 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-bloomberg-green" />
+                <span>Mục tiêu Chốt Lời (Take Profit %):</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={targetTakeProfit}
+                  onChange={(e) => setTargetTakeProfit(e.target.value)}
+                  placeholder="VD: 1.2"
+                  className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-gray-100 font-bold focus:outline-none focus:border-bloomberg-green"
+                />
+                <span className="text-gray-400 font-bold">%</span>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                * Khuyến nghị: <strong>1.0% - 1.5%</strong>. Trừ phí sàn (~0.2%), mỗi vòng ăn ròng ~0.8% - 1.3%, tiền về ví ngay để quét lệnh mới.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-gray-300 font-bold mb-1 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-bloomberg-red" />
+                <span>Mục tiêu Cắt Lỗ (Stop Loss %):</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={targetStopLoss}
+                  onChange={(e) => setTargetStopLoss(e.target.value)}
+                  placeholder="VD: 1.0"
+                  className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-gray-100 font-bold focus:outline-none focus:border-bloomberg-red"
+                />
+                <span className="text-gray-400 font-bold">%</span>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">
+                * Khuyến nghị: <strong>0.8% - 1.2%</strong>. Cắt dứt khoát nếu thị trường quay đầu phá vỡ điểm nảy để bảo toàn vốn.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Capital & Intervals */}

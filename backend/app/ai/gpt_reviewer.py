@@ -71,9 +71,18 @@ class GPTIndependentReviewer:
 
         user_prompt = "\n".join(prompt_parts)
 
+        effective_system_prompt = GPT_SYSTEM_PROMPT
+        if settings.SCALPING_MODE_ENABLED:
+            effective_system_prompt += (
+                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI]\n"
+                f"- Hệ thống đang chạy chế độ chốt lời vi mô (Take Profit mục tiêu: ~+{settings.TARGET_TAKE_PROFIT_PERCENT}%, Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}%).\n"
+                f"- Hãy CHẤP THUẬN (APPROVE) các lệnh BUY lướt sóng có tỷ lệ Risk:Reward >= 1.1:1 nếu tín hiệu kỹ thuật ủng hộ nhịp nảy giá và spread/phí sàn (0.2%) được bù đắp tốt.\n"
+                f"- KHÔNG được từ chối chỉ vì khoảng cách Take Profit ngắn ({settings.TARGET_TAKE_PROFIT_PERCENT}%)."
+            )
+
         data, latency_ms, usage = await self.gateway.complete_chat(
             model_id=target_model,
-            system_prompt=GPT_SYSTEM_PROMPT,
+            system_prompt=effective_system_prompt,
             user_prompt=user_prompt,
             reasoning_level=settings.GPT_REASONING_LEVEL
         )

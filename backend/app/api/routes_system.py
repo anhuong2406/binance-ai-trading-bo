@@ -36,6 +36,9 @@ class SettingsUpdateRequest(BaseModel):
     bot_allocated_capital: Optional[float] = None
     evaluation_interval_seconds: Optional[int] = None
     quant_prefilter_enabled: Optional[bool] = None
+    target_take_profit_percent: Optional[float] = None
+    target_stop_loss_percent: Optional[float] = None
+    scalping_mode_enabled: Optional[bool] = None
 
 @router.get("/status")
 async def get_system_status():
@@ -145,6 +148,9 @@ async def get_settings():
         "bot_allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
         "evaluation_interval_seconds": settings.EVALUATION_INTERVAL_SECONDS,
         "quant_prefilter_enabled": settings.QUANT_PREFILTER_ENABLED,
+        "scalping_mode_enabled": settings.SCALPING_MODE_ENABLED,
+        "target_take_profit_percent": settings.TARGET_TAKE_PROFIT_PERCENT,
+        "target_stop_loss_percent": settings.TARGET_STOP_LOSS_PERCENT,
         "max_risk_per_trade_percent": settings.MAX_RISK_PER_TRADE_PERCENT,
         "max_position_size_percent": settings.MAX_POSITION_SIZE_PERCENT,
         "daily_max_loss_percent": settings.DAILY_MAX_LOSS_PERCENT,
@@ -175,6 +181,12 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
         settings.EVALUATION_INTERVAL_SECONDS = req.evaluation_interval_seconds
     if req.quant_prefilter_enabled is not None:
         settings.QUANT_PREFILTER_ENABLED = req.quant_prefilter_enabled
+    if req.scalping_mode_enabled is not None:
+        settings.SCALPING_MODE_ENABLED = req.scalping_mode_enabled
+    if req.target_take_profit_percent is not None and req.target_take_profit_percent > 0:
+        settings.TARGET_TAKE_PROFIT_PERCENT = round(req.target_take_profit_percent, 2)
+    if req.target_stop_loss_percent is not None and req.target_stop_loss_percent > 0:
+        settings.TARGET_STOP_LOSS_PERCENT = round(req.target_stop_loss_percent, 2)
 
     # Update active client instances
     trading_controller.binance_client.set_credentials(
@@ -203,6 +215,10 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
                     "AI_API_KEY": settings.AI_API_KEY,
                     "GPT_MODEL_ID": settings.GPT_MODEL_ID,
                     "GEMINI_MODEL_ID": settings.GEMINI_MODEL_ID,
+                    "SCALPING_MODE_ENABLED": str(settings.SCALPING_MODE_ENABLED),
+                    "TARGET_TAKE_PROFIT_PERCENT": str(settings.TARGET_TAKE_PROFIT_PERCENT),
+                    "TARGET_STOP_LOSS_PERCENT": str(settings.TARGET_STOP_LOSS_PERCENT),
+                    "QUANT_PREFILTER_ENABLED": str(settings.QUANT_PREFILTER_ENABLED),
                 }
                 lines = text.splitlines()
                 new_lines = []

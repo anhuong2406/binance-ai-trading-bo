@@ -73,9 +73,19 @@ class GeminiMarketAnalyst:
 
         user_prompt = "\n".join(prompt_parts)
 
+        effective_system_prompt = GEMINI_SYSTEM_PROMPT
+        if settings.SCALPING_MODE_ENABLED:
+            effective_system_prompt += (
+                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI]\n"
+                f"- Hệ thống đang ưu tiên chốt lời nhanh để xoay vòng vốn liên tục.\n"
+                f"- Mục tiêu Take Profit: ~+{settings.TARGET_TAKE_PROFIT_PERCENT}% so với Entry Price.\n"
+                f"- Mức Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}% so với Entry Price (hoặc đáy nến gần nhất).\n"
+                f"- Tỷ lệ Risk:Reward tối thiểu từ 1.1:1 đến 1.5:1 là hoàn toàn hợp lệ."
+            )
+
         data, latency_ms, usage = await self.gateway.complete_chat(
             model_id=target_model,
-            system_prompt=GEMINI_SYSTEM_PROMPT,
+            system_prompt=effective_system_prompt,
             user_prompt=user_prompt,
             reasoning_level=settings.GEMINI_REASONING_LEVEL
         )

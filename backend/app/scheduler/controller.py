@@ -196,7 +196,8 @@ class AutoTradingController:
                 actions = await PositionManager.update_active_positions(
                     session=session,
                     current_prices=prices,
-                    mode=self.mode
+                    mode=self.mode,
+                    execution_engine=self.execution if self.mode == "LIVE" else None
                 )
                 if actions:
                     for act in actions:

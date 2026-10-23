@@ -151,3 +151,57 @@ def test_evaluate_opportunity_trigger():
     res_dead = QuantEngine.evaluate_opportunity_trigger(indicators_dead, candles=[])
     assert res_dead["has_opportunity"] is False
     assert "Radar Định Lượng" in res_dead["reason"]
+
+@pytest.mark.asyncio
+async def test_scalping_take_profit_and_stop_loss():
+    from decimal import Decimal
+    from app.config.settings import settings
+    from app.trading.position_manager import PositionManager
+    from app.database.session import AsyncSessionLocal
+    from app.database.models import Position
+
+    assert settings.SCALPING_MODE_ENABLED is True
+    assert settings.TARGET_TAKE_PROFIT_PERCENT == 1.2
+    assert settings.TARGET_STOP_LOSS_PERCENT == 1.0
+
+    # Calculate scalping TP / SL on entry of 100
+    entry_price = Decimal("100.0")
+    tp = entry_price * (Decimal("1.0") + Decimal(str(settings.TARGET_TAKE_PROFIT_PERCENT / 100.0)))
+    sl = entry_price * (Decimal("1.0") - Decimal(str(settings.TARGET_STOP_LOSS_PERCENT / 100.0)))
+
+    assert tp == Decimal("101.2")
+    assert sl == Decimal("99.0")
+
+    # Test PositionManager triggers Take Profit when price reaches 101.25
+    async with AsyncSessionLocal() as session:
+        pos = await PositionManager.open_position(
+            session=session,
+            symbol="DOGEUSDT",
+            amount=Decimal("10"),
+            entry_price=entry_price,
+            stop_loss=sl,
+            take_profit=tp,
+            fee=Decimal("0.01"),
+            mode="PAPER"
+        )
+        assert pos.id is not None
+        assert pos.status == "OPEN"
+
+        # Market price below TP -> no action
+        actions = await PositionManager.update_active_positions(
+            session=session,
+            current_prices={"DOGEUSDT": 100.5},
+            mode="PAPER"
+        )
+        assert len(actions) == 0
+
+        # Market price reaches or exceeds TP (101.25 >= 101.20) -> TAKE_PROFIT_TRIGGERED
+        actions_tp = await PositionManager.update_active_positions(
+            session=session,
+            current_prices={"DOGEUSDT": 101.25},
+            mode="PAPER"
+        )
+        assert len(actions_tp) == 1
+        assert actions_tp[0]["action"] == "CLOSED"
+        assert actions_tp[0]["reason"] == "TAKE_PROFIT_TRIGGERED"
+        assert actions_tp[0]["pnl"] > 0
