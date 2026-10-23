@@ -123,7 +123,7 @@ async def get_trading_stats(db: AsyncSession = Depends(get_db)):
     res = await db.execute(stmt)
     daily_stats = res.scalars().all()
 
-    # Aggregate open positions unrealized PnL
+    # Aggregate open positions unrealized PnL (Filtered by active Mode)
     open_stmt = select(Position).where(
         Position.status == "OPEN",
         Position.mode == trading_controller.mode
@@ -131,11 +131,19 @@ async def get_trading_stats(db: AsyncSession = Depends(get_db)):
     open_res = await db.execute(open_stmt)
     open_positions = open_res.scalars().all()
 
-    total_unrealized_pnl = sum(float(p.unrealized_pnl) for p in open_positions)
-    total_realized_pnl = sum(d.daily_pnl for d in daily_stats)
-    total_trades = sum(d.trade_count for d in daily_stats)
-    total_wins = sum(d.win_count for d in daily_stats)
-    total_losses = sum(d.loss_count for d in daily_stats)
+    # Aggregate closed positions realized PnL (Filtered by active Mode)
+    closed_stmt = select(Position).where(
+        Position.status == "CLOSED",
+        Position.mode == trading_controller.mode
+    )
+    closed_res = await db.execute(closed_stmt)
+    closed_positions = closed_res.scalars().all()
+
+    total_unrealized_pnl = sum(float(p.unrealized_pnl or 0.0) for p in open_positions)
+    total_realized_pnl = sum(float(p.realized_pnl or 0.0) for p in closed_positions)
+    total_trades = len(closed_positions)
+    total_wins = sum(1 for p in closed_positions if (p.realized_pnl or 0) > 0)
+    total_losses = sum(1 for p in closed_positions if (p.realized_pnl or 0) <= 0)
     win_rate = (total_wins / total_trades * 100) if total_trades > 0 else 0.0
 
     return {
