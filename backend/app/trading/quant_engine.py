@@ -418,6 +418,7 @@ class QuantEngine:
         ltf_lows: List[float],
         ltf_closes: List[float],
         ltf_volumes: List[float],
+        scalping_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Multi-Timeframe Alignment Analysis.
@@ -468,6 +469,13 @@ class QuantEngine:
             alignment_strength = 30.0
             allow_buy = False
             note = "Không có xu hướng rõ ràng trên cả hai khung thời gian."
+
+        # Scalping Mode Override: Allow quick micro-rebounds in Sideway / Range markets
+        # Only hard-block if both HTF and LTF are collapsing in ALIGNED_BEARISH
+        if scalping_mode and not allow_buy and alignment != "ALIGNED_BEARISH":
+            allow_buy = True
+            bias = "BUY"
+            note = f"Chế độ Scalping Vi Mô: Cho phép mở lệnh lướt sóng ăn nhịp nảy (+1.2%) trong thị trường Sideway / Tích lũy."
 
         return {
             "alignment": alignment,

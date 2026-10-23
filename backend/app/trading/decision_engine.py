@@ -104,7 +104,8 @@ class DecisionEngine:
                 h_vols   = [c.volume for c in candles_1h]
                 mtf_alignment = QuantEngine.compute_mtf_alignment(
                     htf_highs=h_highs, htf_lows=h_lows, htf_closes=h_closes, htf_volumes=h_vols,
-                    ltf_highs=highs,   ltf_lows=lows,   ltf_closes=closes,   ltf_volumes=volumes
+                    ltf_highs=highs,   ltf_lows=lows,   ltf_closes=closes,   ltf_volumes=volumes,
+                    scalping_mode=settings.SCALPING_MODE_ENABLED
                 )
                 pipeline_log["steps"]["mtf_alignment"] = {
                     "status": "PASS",
@@ -294,13 +295,21 @@ class DecisionEngine:
         consensus = DecisionConsensus.evaluate_consensus(symbol, gemini_out, gpt_out)
 
         # Multi-Timeframe Hard Safety Guard
-        if consensus.approved and consensus.action == "BUY" and mtf_alignment.get("allow_buy") is False:
-            consensus.approved = False
-            consensus.action = "HOLD"
-            consensus.reason = (
-                f"Multi-Timeframe Veto: Khung 1h đang {mtf_alignment.get('alignment', 'COUNTER_TREND')} "
-                f"({mtf_alignment.get('note', '')}). Tự động khóa lệnh BUY ngược xu hướng lớn để bảo vệ vốn."
-            )
+        if consensus.approved and consensus.action == "BUY":
+            if not settings.SCALPING_MODE_ENABLED and mtf_alignment.get("allow_buy") is False:
+                consensus.approved = False
+                consensus.action = "HOLD"
+                consensus.reason = (
+                    f"Multi-Timeframe Veto: Khung 1h đang {mtf_alignment.get('alignment', 'COUNTER_TREND')} "
+                    f"({mtf_alignment.get('note', '')}). Tự động khóa lệnh BUY ngược xu hướng lớn để bảo vệ vốn."
+                )
+            elif settings.SCALPING_MODE_ENABLED and mtf_alignment.get("alignment") == "ALIGNED_BEARISH":
+                consensus.approved = False
+                consensus.action = "HOLD"
+                consensus.reason = (
+                    f"Scalping Bearish Veto: Cả hai khung thời gian 1h và 15m đều đang giảm mạnh (ALIGNED_BEARISH). "
+                    f"Tạm hoãn lướt sóng để tránh bắt dao rơi."
+                )
 
         # Market Session Guard (Dead Zone Low Liquidity)
         session_info = indicators.get("latest", {}).get("market_session", {})

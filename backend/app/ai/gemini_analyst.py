@@ -77,9 +77,11 @@ class GeminiMarketAnalyst:
         if settings.SCALPING_MODE_ENABLED:
             effective_system_prompt += (
                 f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI]\n"
-                f"- Hệ thống đang ưu tiên chốt lời nhanh để xoay vòng vốn liên tục.\n"
+                f"- Hệ thống đang ưu tiên chốt lời nhanh (+{settings.TARGET_TAKE_PROFIT_PERCENT}%) để xoay vòng vốn liên tục.\n"
+                f"- Trong thị trường đi ngang (RANGING/SIDEWAY): Hãy CHỦ ĐỘNG đề xuất action: 'BUY' khi có tín hiệu nảy giá ngắn hạn (RSI/StochRSI nảy lên, chạm dải Bollinger dưới bật lên, hoặc volume gom hàng). KHÔNG cần chờ khung 1H phải uptrend mạnh.\n"
+                f"- Chỉ đề xuất 'HOLD' khi giá đang đu đỉnh sát dải trên Bollinger (%B > 0.85) hoặc cả hai khung thời gian đang cắm đầu rơi tự do.\n"
                 f"- Mục tiêu Take Profit: ~+{settings.TARGET_TAKE_PROFIT_PERCENT}% so với Entry Price.\n"
-                f"- Mức Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}% so với Entry Price (hoặc đáy nến gần nhất).\n"
+                f"- Mức Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}% so với Entry Price.\n"
                 f"- Tỷ lệ Risk:Reward tối thiểu từ 1.1:1 đến 1.5:1 là hoàn toàn hợp lệ."
             )
 

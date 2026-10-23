@@ -76,8 +76,8 @@ class GPTIndependentReviewer:
             effective_system_prompt += (
                 f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI]\n"
                 f"- Hệ thống đang chạy chế độ chốt lời vi mô (Take Profit mục tiêu: ~+{settings.TARGET_TAKE_PROFIT_PERCENT}%, Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}%).\n"
-                f"- Hãy CHẤP THUẬN (APPROVE) các lệnh BUY lướt sóng có tỷ lệ Risk:Reward >= 1.1:1 nếu tín hiệu kỹ thuật ủng hộ nhịp nảy giá và spread/phí sàn (0.2%) được bù đắp tốt.\n"
-                f"- KHÔNG được từ chối chỉ vì khoảng cách Take Profit ngắn ({settings.TARGET_TAKE_PROFIT_PERCENT}%)."
+                f"- Hãy CHẤP THUẬN (APPROVE) các lệnh BUY lướt sóng có tỷ lệ Risk:Reward >= 1.1:1 ngay cả khi thị trường đang đi ngang (RANGING/SIDEWAY), miễn là có tín hiệu kỹ thuật nảy giá ngắn hạn và spread/phí sàn (0.2%) được bù đắp tốt.\n"
+                f"- KHÔNG được từ chối chỉ vì khung 1H đi ngang hoặc vì khoảng cách Take Profit ngắn ({settings.TARGET_TAKE_PROFIT_PERCENT}%)."
             )
 
         data, latency_ms, usage = await self.gateway.complete_chat(
