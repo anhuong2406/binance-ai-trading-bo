@@ -165,3 +165,23 @@ async def test_case_18_disconnect_while_in_position(test_db):
     assert len(actions) == 1
     assert actions[0]["reason"] == "STOP_LOSS_TRIGGERED"
     assert pos.status == "CLOSED"
+
+@pytest.mark.asyncio
+async def test_convert_asset_success():
+    """Verify convert_asset requests quote, accepts it, and returns status."""
+    client = BinanceSpotClient(api_key="key", api_secret="secret")
+    
+    async def mock_request(method, path, **kwargs):
+        if path == "/sapi/v1/convert/getQuote":
+            return {"quoteId": "quote_123", "ratio": "2366.0", "toAmount": "4.96"}
+        elif path == "/sapi/v1/convert/acceptQuote":
+            return {"orderId": "order_789", "orderStatus": "PROCESS"}
+        elif path == "/sapi/v1/convert/orderStatus":
+            return {"orderId": "order_789", "orderStatus": "SUCCESS", "toAmount": "4.96"}
+        return {}
+
+    with patch.object(client, "_request", new=AsyncMock(side_effect=mock_request)):
+        res = await client.convert_asset("ETH", "USDT", "0.0020979")
+        assert res["orderStatus"] == "SUCCESS"
+        assert res["orderId"] == "order_789"
+

@@ -105,15 +105,42 @@ async def close_position_manually(position_id: int, db: AsyncSession = Depends(g
         price = Decimal(str(result["fill_price"]))
         await db.refresh(pos)
     elif pos.mode in ("LIVE", "TESTNET"):
+        base_asset = pos.symbol[:-4] if pos.symbol.endswith("USDT") else pos.symbol
+        try:
+            free_bal = await trading_controller.decision_engine.account_manager.get_free_balance(base_asset)
+            qty_to_sell = min(Decimal(pos.amount), free_bal) if free_bal > 0 else Decimal(pos.amount)
+        except Exception:
+            qty_to_sell = Decimal(pos.amount)
+
+        used_convert = False
         try:
             result = await trading_controller.decision_engine.execution.execute_spot_order(
                 symbol=pos.symbol,
                 side="SELL",
                 order_type="MARKET",
-                quantity=Decimal(pos.amount)
+                quantity=qty_to_sell
             )
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Binance chưa xác nhận lệnh SELL: {e}")
+        except Exception as spot_err:
+            # Fallback to Binance Convert when spot order fails (e.g. MIN_NOTIONAL < 5 USDT or LOT_SIZE)
+            try:
+                convert_res = await trading_controller.binance_client.convert_asset(
+                    from_asset=base_asset,
+                    to_asset="USDT",
+                    from_amount=qty_to_sell
+                )
+                used_convert = True
+                result = {
+                    "orderId": convert_res.get("orderId"),
+                    "clientOrderId": f"CONVERT_{convert_res.get('quoteId', pos.id)}",
+                    "executedQty": str(convert_res.get("fromAmount", qty_to_sell)),
+                    "cummulativeQuoteQty": str(convert_res.get("toAmount", "0")),
+                    "status": "FILLED"
+                }
+            except Exception as conv_err:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Binance chưa xác nhận lệnh SELL (Spot: {spot_err} | Convert: {conv_err})"
+                )
 
         executed_qty = Decimal(str(result.get("executedQty", "0")))
         quote_qty = Decimal(str(result.get("cummulativeQuoteQty", "0")))
@@ -124,7 +151,7 @@ async def close_position_manually(position_id: int, db: AsyncSession = Depends(g
             symbol=pos.symbol,
             side="SELL",
             order_type="MARKET",
-            quantity=Decimal(pos.amount),
+            quantity=qty_to_sell,
             executed_qty=executed_qty,
             cummulative_quote_qty=quote_qty,
             status=str(result.get("status", "UNKNOWN")).upper(),
@@ -137,13 +164,14 @@ async def close_position_manually(position_id: int, db: AsyncSession = Depends(g
         price = quote_qty / executed_qty if quote_qty > 0 else Decimal(pos.current_price)
         quantity_to_close = min(executed_qty, Decimal(pos.amount))
         quote_for_closed = quote_qty * quantity_to_close / executed_qty if quote_qty > 0 else price * quantity_to_close
-        exit_fee = quote_for_closed * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+        exit_fee = Decimal("0.0") if used_convert else quote_for_closed * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+        close_reason = "MANUAL_USER_CLOSE (Binance Convert)" if used_convert else "MANUAL_USER_CLOSE"
         closed = await PositionManager.close_position(
             session=db,
             position_id=pos.id,
             exit_price=price,
             exit_fee=exit_fee,
-            reason="MANUAL_USER_CLOSE",
+            reason=close_reason,
             quantity=quantity_to_close
         )
     else:

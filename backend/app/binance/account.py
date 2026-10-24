@@ -68,3 +68,12 @@ class AccountManager:
             "usdtLocked": float(usdt_locked),
             "balances": balances
         }
+
+    async def get_free_balance(self, asset: str) -> Decimal:
+        """Returns the free balance of a specific asset."""
+        account_info = await self.client.get_account_information()
+        for b in account_info.get("balances", []):
+            if b.get("asset") == asset.upper():
+                return Decimal(str(b.get("free", "0")))
+        return Decimal("0")
+

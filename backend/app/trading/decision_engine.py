@@ -495,12 +495,47 @@ class DecisionEngine:
             }
         else:
             # LIVE or TESTNET
-            exec_res = await self.execution.execute_spot_order(
-                symbol=symbol,
-                side=consensus.action,
-                order_type="MARKET",
-                quantity=order_quantity
-            )
+            used_convert = False
+            if consensus.action == "SELL" and sell_position is not None:
+                base_asset = symbol[:-4] if symbol.endswith("USDT") else symbol
+                try:
+                    free_bal = await self.account_manager.get_free_balance(base_asset)
+                    if free_bal > 0:
+                        order_quantity = min(order_quantity, free_bal)
+                except Exception:
+                    pass
+
+            try:
+                exec_res = await self.execution.execute_spot_order(
+                    symbol=symbol,
+                    side=consensus.action,
+                    order_type="MARKET",
+                    quantity=order_quantity
+                )
+            except Exception as spot_err:
+                if consensus.action == "SELL" and sell_position is not None:
+                    base_asset = symbol[:-4] if symbol.endswith("USDT") else symbol
+                    try:
+                        convert_res = await self.binance_client.convert_asset(
+                            from_asset=base_asset,
+                            to_asset="USDT",
+                            from_amount=order_quantity
+                        )
+                        used_convert = True
+                        quote_id_val = convert_res.get("quoteId") or sell_position.id
+                        exec_res = {
+                            "orderId": convert_res.get("orderId"),
+                            "clientOrderId": f"CONVERT_{quote_id_val}",
+                            "executedQty": str(convert_res.get("fromAmount", order_quantity)),
+                            "cummulativeQuoteQty": str(convert_res.get("toAmount", "0")),
+                            "status": "FILLED"
+                        }
+                    except Exception as conv_err:
+                        raise RuntimeError(
+                            f"Lệnh SELL thất bại (Spot: {spot_err} | Convert: {conv_err})"
+                        )
+                else:
+                    raise
 
             executed_qty = Decimal(str(exec_res.get("executedQty", "0")))
             quote_qty = Decimal(str(exec_res.get("cummulativeQuoteQty", "0")))
@@ -538,7 +573,7 @@ class DecisionEngine:
 
             fill_price = quote_qty / executed_qty if quote_qty > 0 else market_price
             fee_basis = quote_qty if quote_qty > 0 else executed_qty * fill_price
-            estimated_fee = fee_basis * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+            estimated_fee = Decimal("0.0") if used_convert else fee_basis * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
             position_id = None
             remaining_quantity = 0.0
 
@@ -560,12 +595,14 @@ class DecisionEngine:
             else:
                 closed_qty = min(executed_qty, Decimal(sell_position.amount))
                 closed_quote = fee_basis * closed_qty / executed_qty
+                exit_fee = Decimal("0.0") if used_convert else closed_quote * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+                close_reason = "AI_SELL_SIGNAL (Binance Convert)" if used_convert else "AI_SELL_SIGNAL"
                 closed = await PositionManager.close_position(
                     session=session,
                     position_id=sell_position.id,
                     exit_price=fill_price,
-                    exit_fee=closed_quote * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0)),
-                    reason="AI_SELL_SIGNAL",
+                    exit_fee=exit_fee,
+                    reason=close_reason,
                     quantity=closed_qty
                 )
                 position_id = closed.id

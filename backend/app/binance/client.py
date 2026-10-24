@@ -267,3 +267,54 @@ class BinanceSpotClient:
         if orig_client_order_id:
             params["origClientOrderId"] = orig_client_order_id
         return await self._request("DELETE", "/api/v3/order", params=params, signed=True)
+
+    async def convert_asset(
+        self,
+        from_asset: str,
+        to_asset: str,
+        from_amount: Decimal | str
+    ) -> Dict[str, Any]:
+        """
+        Converts an asset to another using Binance Convert API.
+        Bypasses MIN_NOTIONAL and LOT_SIZE restrictions on Spot order books.
+        Ideal for selling small balances, dust, or sub-5 USDT positions.
+        """
+        quote = await self._request(
+            "POST",
+            "/sapi/v1/convert/getQuote",
+            signed=True,
+            params={
+                "fromAsset": from_asset.upper(),
+                "toAsset": to_asset.upper(),
+                "fromAmount": str(from_amount)
+            }
+        )
+        quote_id = quote.get("quoteId")
+        if not quote_id:
+            raise ValueError(f"Binance Convert getQuote failed: {quote}")
+
+        accept = await self._request(
+            "POST",
+            "/sapi/v1/convert/acceptQuote",
+            signed=True,
+            params={"quoteId": quote_id}
+        )
+        order_id = accept.get("orderId")
+        if not order_id:
+            raise ValueError(f"Binance Convert acceptQuote failed: {accept}")
+
+        # Poll status for confirmation
+        for _ in range(6):
+            await asyncio.sleep(0.5)
+            status = await self._request(
+                "GET",
+                "/sapi/v1/convert/orderStatus",
+                signed=True,
+                params={"orderId": str(order_id)}
+            )
+            if status.get("orderStatus") in ("SUCCESS", "ACCEPT_SUCCESS"):
+                return status
+            elif status.get("orderStatus") == "FAIL":
+                raise RuntimeError(f"Binance Convert order {order_id} failed: {status}")
+
+        return status
