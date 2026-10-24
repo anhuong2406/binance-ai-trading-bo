@@ -109,3 +109,32 @@ def test_case_15_prompt_injection_defense():
     safe_data = "Giá BTC đang tích lũy quanh vùng 65,000 USDT với khối lượng tăng dần."
     assert detect_prompt_injection(safe_data) is False
     assert sanitize_for_prompt(safe_data) == safe_data
+
+def test_single_ai_mode_gemini_direct_execution():
+    """Verify Single AI Mode with Gemini 3.8 Flash High directly evaluates and approves without GPT."""
+    gemini_buy = {
+        "market_state": "TRENDING",
+        "action": "BUY",
+        "symbol": "DOGEUSDT",
+        "entry_price": 0.08000,
+        "stop_loss": 0.07920,
+        "take_profit": 0.08100,
+        "reasoning": "Breakout ngắn hạn với volume tăng mạnh."
+    }
+    consensus = DecisionConsensus.evaluate_single_analyst("DOGEUSDT", gemini_buy)
+    assert consensus.action == "BUY"
+    assert consensus.approved is True
+    assert consensus.entry_price == 0.08000
+    assert consensus.gpt_decision == "BYPASS"
+    assert "Gemini 3.8 Flash High đề xuất BUY" in consensus.reason
+
+    gemini_hold = {
+        "market_state": "RANGING",
+        "action": "HOLD",
+        "symbol": "DOGEUSDT",
+        "reasoning": "Thị trường đi ngang chưa có điểm vào."
+    }
+    consensus_hold = DecisionConsensus.evaluate_single_analyst("DOGEUSDT", gemini_hold)
+    assert consensus_hold.action == "HOLD"
+    assert consensus_hold.approved is False
+    assert consensus_hold.gpt_decision == "BYPASS"

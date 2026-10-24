@@ -31,12 +31,12 @@ export const LiveDebateCard: React.FC<LiveDebateCardProps> = ({
         <div className="flex items-center gap-2">
           <Scale className="w-4 h-4 text-bloomberg-orange" />
           <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-gray-200">
-            Hội Đồng Giao Dịch AI: Gemini Flash vs GPT-6 Luna
+            Phối Hợp AI: Phân Tích Cơ Hội → Thẩm Định Độc Lập
           </h3>
         </div>
         {consensusAction && (
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-gray-400">Đồng thuận:</span>
+            <span className="text-[11px] font-mono text-gray-400">Kết quả thẩm định:</span>
             <span
               className={`px-2.5 py-0.5 rounded text-xs font-mono font-bold ${
                 consensusAction === 'BUY'
@@ -59,7 +59,7 @@ export const LiveDebateCard: React.FC<LiveDebateCardProps> = ({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-bloomberg-cyan" />
               <span className="font-mono text-xs font-bold text-bloomberg-cyan">
-                Gemini Market Analyst (AI số 2)
+                Gemini Opportunity Analyst · Đề xuất setup
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-bg-darker border border-bg-border text-gray-300">
@@ -126,19 +126,21 @@ export const LiveDebateCard: React.FC<LiveDebateCardProps> = ({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-bloomberg-orange" />
               <span className="font-mono text-xs font-bold text-bloomberg-orange">
-                GPT-6 Luna Reviewer (AI số 1)
+                GPT-6 Luna Reviewer · Bổ trợ & chốt thẩm định
               </span>
             </div>
             <span
               className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
-                gptData?.decision === 'APPROVE'
+                gptData?.decision === 'BYPASS'
+                  ? 'bg-blue-900/30 text-blue-400 border border-blue-500/40'
+                  : gptData?.decision === 'APPROVE'
                   ? 'bg-bloomberg-green/20 text-bloomberg-green border border-bloomberg-green/40'
                   : gptData?.decision === 'REJECT'
                   ? 'bg-bloomberg-red/20 text-bloomberg-red border border-bloomberg-red/40'
                   : 'bg-gray-800 text-gray-300 border border-gray-700'
               }`}
             >
-              {gptData?.decision || 'CHỜ PHẢN BIỆN'}
+              {gptData?.decision === 'BYPASS' ? 'SINGLE AI (BỎ QUA)' : gptData?.decision || 'CHỜ PHẢN BIỆN'}
             </span>
           </div>
 
@@ -151,7 +153,7 @@ export const LiveDebateCard: React.FC<LiveDebateCardProps> = ({
                 ) : (
                   <X className="w-3.5 h-3.5 text-bloomberg-red" />
                 )}
-                <span className="text-gray-300">Đồng thuận chỉ báo</span>
+                <span className="text-gray-300">Phù hợp dữ liệu</span>
               </div>
               <div className="flex items-center gap-1.5 bg-bg-darker p-1.5 rounded border border-bg-border">
                 {gptData?.risk_reward_acceptable ? (
@@ -180,11 +182,44 @@ export const LiveDebateCard: React.FC<LiveDebateCardProps> = ({
             </div>
 
             <div>
-              <span className="text-gray-400 block mb-1">Đánh giá phản biện độc lập:</span>
+              <span className="text-gray-400 block mb-1">Góc nhìn bổ trợ & thẩm định:</span>
               <p className="text-gray-300 bg-bg-darker p-2 rounded border border-bg-border text-[11px] leading-relaxed">
-                {gptData?.reason || 'Chưa có dữ liệu phản biện.'}
+                {gptData?.reason || 'Chưa có dữ liệu thẩm định.'}
               </p>
             </div>
+
+            {gptData?.independent_view && (
+              <div>
+                <span className="text-gray-400 block mb-1">Nhận định riêng từ dữ liệu thị trường:</span>
+                <p className="text-gray-300 bg-bg-darker p-2 rounded border border-bg-border text-[11px] leading-relaxed">
+                  {gptData.independent_view}
+                </p>
+              </div>
+            )}
+
+            {Array.isArray(gptData?.supporting_evidence) && gptData.supporting_evidence.length > 0 && (
+              <div className="text-[11px]">
+                <span className="text-gray-400 block mb-1">Bằng chứng bổ sung:</span>
+                <ul className="list-disc list-inside text-emerald-300/80 bg-bg-darker p-2 rounded border border-bg-border space-y-0.5">
+                  {gptData.supporting_evidence.map((evidence: string, idx: number) => <li key={idx}>{evidence}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {Array.isArray(gptData?.key_risks) && gptData.key_risks.length > 0 && (
+              <div className="text-[11px]">
+                <span className="text-gray-400 block mb-1">Rủi ro cần theo dõi:</span>
+                <ul className="list-disc list-inside text-amber-300/80 bg-bg-darker p-2 rounded border border-bg-border space-y-0.5">
+                  {gptData.key_risks.map((risk: string, idx: number) => <li key={idx}>{risk}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {gptData?.suggested_adjustment && (
+              <div className="text-[11px] text-cyan-200 bg-cyan-950/20 border border-cyan-800/40 p-2 rounded">
+                Gợi ý điều chỉnh (chưa tự áp dụng): {gptData.suggested_adjustment}
+              </div>
+            )}
 
             {rejectionReason && (
               <div className="bg-bloomberg-red/10 border border-bloomberg-red/30 p-2 rounded text-[11px] text-red-300 flex items-start gap-1.5">

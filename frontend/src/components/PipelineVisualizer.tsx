@@ -17,10 +17,10 @@ interface PipelineVisualizerProps {
 
 export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastReport }) => {
   const steps = lastReport?.steps || {};
+  const isHoldAction = steps.consensus?.action === 'HOLD' || steps.gemini_analyst?.output?.action === 'HOLD';
 
   const getStepStatus = (stepKey: string) => {
     const data = steps[stepKey];
-    const isHoldAction = steps.gemini_analyst?.output?.action === 'HOLD';
     if (!data) {
       if (isHoldAction && (stepKey === 'risk_engine' || stepKey === 'execution')) {
         return { status: 'PASS', color: 'border-cyan-500/40 text-cyan-400 bg-cyan-950/20' };
@@ -33,7 +33,16 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
     if (data.status === 'PASS') {
       return { status: 'PASS', color: 'border-bloomberg-green/50 text-bloomberg-green bg-bloomberg-green/10' };
     }
-    if (data.status === 'FAIL' || data.status === 'DISAGREED' || data.passed === false) {
+    if (data.status === 'STANDBY') {
+      return { status: 'STANDBY', color: 'border-cyan-700/50 text-cyan-300 bg-cyan-950/20' };
+    }
+    if (isHoldAction && (stepKey === 'risk_engine' || stepKey === 'execution')) {
+      return { status: 'STANDBY', color: 'border-cyan-700/50 text-cyan-300 bg-cyan-950/20' };
+    }
+    if (data.status === 'PASS') {
+      return { status: 'PASS', color: 'border-bloomberg-green/50 text-bloomberg-green bg-bloomberg-green/10' };
+    }
+    if (data.status === 'FAIL' || data.status === 'DISAGREED' || data.status === 'BLOCKED' || data.passed === false) {
       return { status: 'FAIL', color: 'border-bloomberg-red/50 text-bloomberg-red bg-bloomberg-red/10' };
     }
     return { status: 'ACTIVE', color: 'border-bloomberg-cyan text-bloomberg-cyan bg-bloomberg-cyan/10 animate-pulse' };
@@ -62,8 +71,10 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       icon: Sparkles,
       details: steps.gemini_analyst
         ? steps.gemini_analyst.status === 'SKIPPED'
-          ? 'Tiết kiệm token (0 call)'
-          : `${steps.gemini_analyst.output?.action} (${steps.gemini_analyst.latency_ms}ms)`
+          ? 'Chưa gọi Gemini'
+          : steps.gemini_analyst.status === 'FAIL'
+          ? `Lỗi: ${steps.gemini_analyst.error || 'Không rõ nguyên nhân'}`
+          : `${steps.gemini_analyst.output?.action || 'Chưa có kết quả'} (${typeof steps.gemini_analyst.latency_ms === 'number' ? `${steps.gemini_analyst.latency_ms}ms` : 'chưa có thời gian'})`
         : 'Chiến lược & Đề xuất',
     },
     {
@@ -72,9 +83,11 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       icon: ShieldCheck,
       details: steps.gpt_reviewer
         ? steps.gpt_reviewer.status === 'SKIPPED'
-          ? 'Tiết kiệm token (0 call)'
-          : `${steps.gpt_reviewer.output?.decision} (${steps.gpt_reviewer.latency_ms}ms)`
-        : 'Thẩm định độc lập',
+          ? (steps.gpt_reviewer.note || 'Bỏ qua (Single Gemini 3.8)')
+          : steps.gpt_reviewer.status === 'FAIL'
+          ? `Lỗi: ${steps.gpt_reviewer.error || 'Không rõ nguyên nhân'}`
+          : `${steps.gpt_reviewer.output?.decision || 'Chưa có kết quả'} (${typeof steps.gpt_reviewer.latency_ms === 'number' ? `${steps.gpt_reviewer.latency_ms}ms` : 'chưa có thời gian'})`
+        : 'Góc nhìn bổ trợ & kiểm tra rủi ro',
     },
     {
       key: 'risk_engine',
@@ -82,11 +95,11 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       icon: ShieldCheck,
       details: steps.risk_engine
         ? steps.risk_engine.passed
-          ? steps.gemini_analyst?.output?.action === 'HOLD'
+          ? isHoldAction
             ? 'BẢO TOÀN VỐN (0% RỦI RO)'
             : `PASS (Risk ${steps.risk_engine.calculated_risk_percent}%)`
           : 'TỪ CHỐI RỦI RO'
-        : steps.gemini_analyst?.output?.action === 'HOLD'
+        : isHoldAction
         ? 'Bảo toàn vốn (HOLD)'
         : 'Quy tắc vốn & Drawdown',
     },
@@ -95,10 +108,10 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
       name: 'Execution',
       icon: Send,
       details: steps.execution
-        ? steps.gemini_analyst?.output?.action === 'HOLD'
+        ? isHoldAction
           ? 'STANDBY (0 LỆNH)'
           : `${steps.execution.mode}: ${steps.execution.result?.status || 'DONE'}`
-        : steps.gemini_analyst?.output?.action === 'HOLD'
+        : isHoldAction
         ? 'Standby (0 Lệnh)'
         : 'Khớp lệnh Spot',
     },
@@ -112,6 +125,11 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
           <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-gray-200">
             Pipeline Đa Tác Nhân Tự Động (AI Trading Pipeline)
           </h3>
+          {lastReport?.symbol && (
+            <span className="rounded border border-bloomberg-cyan/30 bg-cyan-950/30 px-2 py-0.5 text-[10px] font-mono font-bold text-bloomberg-cyan">
+              {lastReport.symbol} · {lastReport.timeframe || 'N/A'} · {lastReport.mode || 'N/A'}
+            </span>
+          )}
         </div>
         {lastReport?.timestamp && (
           <span className="text-[11px] font-mono text-gray-400 flex items-center gap-1">
@@ -151,42 +169,20 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({ lastRepo
               </div>
 
               <div className="mt-2 pt-2 border-t border-bg-border/60 text-[11px] font-mono truncate text-gray-300">
-                {stage.details}
+                <span title={stage.details}>{stage.details}</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Quant Opportunity Pre-Filter Banner */}
-      {steps.quant_pre_filter && (
-        <div className={`mt-3 p-2.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs font-mono ${
-          steps.quant_pre_filter.has_opportunity
-            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-            : 'bg-bg-darkest border-bg-border text-gray-300'
-        }`}>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase font-bold text-gray-400">Radar Sơ Tuyển Cơ Hội:</span>
-            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-              steps.quant_pre_filter.has_opportunity
-                ? 'bg-emerald-900 text-emerald-200 border border-emerald-500/50'
-                : 'bg-gray-800 text-gray-400 border border-gray-700'
-            }`}>
-              {steps.quant_pre_filter.has_opportunity ? '🎯 PHÁT HIỆN CƠ HỘI' : '⚡ TIẾT KIỆM TOKEN (0 CALL)'}
-            </span>
-            <span className="text-[11px] truncate max-w-lg">{steps.quant_pre_filter.summary}</span>
-          </div>
-          <span className="text-[10px] text-gray-400 self-end sm:self-auto">
-            {steps.quant_pre_filter.has_opportunity ? 'Đã gọi 2 AI phân tích' : 'Đã tiết kiệm ~7,000 token'}
-          </span>
-        </div>
-      )}
-
       {/* Multi-Timeframe Alignment Indicator */}
       {steps.mtf_alignment && steps.mtf_alignment.alignment && (
         <div className="mt-3 p-2.5 rounded-lg bg-bg-darkest border border-bg-border flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs font-mono">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase font-bold text-gray-400">Multi-Timeframe (1H & 15M):</span>
+            <span className="text-[10px] uppercase font-bold text-gray-400">
+              Multi-Timeframe (1H & {steps.mtf_alignment.ltf?.timeframe || lastReport?.timeframe || 'N/A'}):
+            </span>
             <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
               steps.mtf_alignment.allow_buy
                 ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/50'

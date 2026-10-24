@@ -12,6 +12,7 @@ export interface SystemStatus {
   active_pairs: string[];
   timeframe: string;
   interval_seconds: number;
+  ai_single_model_mode?: boolean;
 }
 
 export interface SpotBalance {
@@ -102,6 +103,9 @@ export interface RiskStatus {
   current_drawdown_percent: number;
   today_trade_count: number;
   today_loss_percent: number;
+  today_pnl_percent?: number;
+  trading_mode?: string;
+  scalping_mode_enabled?: boolean;
   emergency_stop_active: boolean;
   live_locked: boolean;
 }

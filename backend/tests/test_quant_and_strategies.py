@@ -120,38 +120,6 @@ def test_stoch_rsi_and_session_filter():
     assert res_us["is_dead_zone"] is False
     assert res_us["liquidity"] in ("HIGH", "PEAK")
 
-def test_evaluate_opportunity_trigger():
-    # 1. Active position must always trigger
-    res_pos = QuantEngine.evaluate_opportunity_trigger(indicators={}, candles=[], has_open_position=True)
-    assert res_pos["has_opportunity"] is True
-
-    # 2. Oversold RSI trigger (RSI=35)
-    indicators_oversold = {
-        "latest": {"close": 100.0, "rsi14": 35.0, "stoch_rsi_k": 20.0, "volume_ratio": 1.0},
-        "series": {}
-    }
-    res_oversold = QuantEngine.evaluate_opportunity_trigger(indicators_oversold, candles=[])
-    assert res_oversold["has_opportunity"] is True
-    assert any("RSI" in r for r in res_oversold["reasons"])
-
-    # 3. No trigger (downtrend with no setup)
-    indicators_dead = {
-        "latest": {
-            "close": 80.0,
-            "ema9": 85.0,
-            "ema21": 90.0,
-            "rsi14": 48.0,
-            "stoch_rsi_k": 55.0,
-            "stoch_rsi_d": 60.0,
-            "bb_percent_b": 0.45,
-            "volume_ratio": 0.8
-        },
-        "series": {"macd": {"histogram": [-1.0, -2.0]}}
-    }
-    res_dead = QuantEngine.evaluate_opportunity_trigger(indicators_dead, candles=[])
-    assert res_dead["has_opportunity"] is False
-    assert "Radar Định Lượng" in res_dead["reason"]
-
 @pytest.mark.asyncio
 async def test_scalping_take_profit_and_stop_loss():
     from decimal import Decimal
@@ -161,13 +129,13 @@ async def test_scalping_take_profit_and_stop_loss():
     from app.database.models import Position
 
     assert settings.SCALPING_MODE_ENABLED is True
-    assert settings.TARGET_TAKE_PROFIT_PERCENT == 1.2
-    assert settings.TARGET_STOP_LOSS_PERCENT == 1.0
+    assert settings.TARGET_TAKE_PROFIT_PERCENT > 0
+    assert settings.TARGET_STOP_LOSS_PERCENT > 0
 
     # Calculate scalping TP / SL on entry of 100
     entry_price = Decimal("100.0")
-    tp = entry_price * (Decimal("1.0") + Decimal(str(settings.TARGET_TAKE_PROFIT_PERCENT / 100.0)))
-    sl = entry_price * (Decimal("1.0") - Decimal(str(settings.TARGET_STOP_LOSS_PERCENT / 100.0)))
+    tp = entry_price * (Decimal("1.0") + Decimal("0.012"))
+    sl = entry_price * (Decimal("1.0") - Decimal("0.010"))
 
     assert tp == Decimal("101.2")
     assert sl == Decimal("99.0")

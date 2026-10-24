@@ -71,7 +71,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <p className="text-xs text-gray-400 font-mono flex items-center gap-1.5">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-bloomberg-green animate-ping" />
-            Dual AI: Gemini Flash + GPT-6 Luna
+            {status?.ai_single_model_mode !== false
+              ? 'AI: Gemini 3.8 Flash High (Single Model)'
+              : 'Dual AI: Gemini Flash + GPT-6 Luna'}
           </p>
         </div>
       </div>

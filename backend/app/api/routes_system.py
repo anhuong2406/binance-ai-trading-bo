@@ -3,13 +3,15 @@ System & Safety API Routes
 Emergency Stop, LIVE Mode Unlock, Mode Switching, Auditing, and App Configuration.
 """
 from typing import Dict, Any, Optional
+import math
+from pathlib import Path
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config.settings import settings
 from app.database.session import get_db, record_audit
-from app.database.models import AuditEvent, TradingSession
+from app.database.models import AuditEvent, TradingSession, Position
 from app.security.credentials import mask_secret
 from app.scheduler.controller import trading_controller
 from app.trading.pair_manager import pair_manager
@@ -35,13 +37,14 @@ class SettingsUpdateRequest(BaseModel):
     binance_testnet_api_secret: Optional[str] = None
     bot_allocated_capital: Optional[float] = None
     evaluation_interval_seconds: Optional[int] = None
-    quant_prefilter_enabled: Optional[bool] = None
     target_take_profit_percent: Optional[float] = None
     target_stop_loss_percent: Optional[float] = None
     scalping_mode_enabled: Optional[bool] = None
+    ai_single_model_mode: Optional[bool] = None
 
 @router.get("/status")
 async def get_system_status():
+    scalping = settings.SCALPING_MODE_ENABLED
     return {
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -52,8 +55,10 @@ async def get_system_status():
         "live_locked": settings.LIVE_SPOT_LOCKED,
         "allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
         "active_pairs": pair_manager.get_active_symbols(),
-        "timeframe": settings.DEFAULT_TIMEFRAME,
-        "interval_seconds": settings.EVALUATION_INTERVAL_SECONDS
+        "timeframe": settings.SCALPING_TIMEFRAME if scalping else settings.DEFAULT_TIMEFRAME,
+        "interval_seconds": settings.SCALPING_EVALUATION_INTERVAL_SECONDS if scalping else settings.EVALUATION_INTERVAL_SECONDS,
+        "position_monitor_interval_seconds": settings.SCALPING_POSITION_MONITOR_INTERVAL_SECONDS if scalping else 15,
+        "ai_single_model_mode": settings.AI_SINGLE_MODEL_MODE
     }
 
 @router.post("/emergency-stop")
@@ -120,9 +125,35 @@ async def switch_trading_mode(req: ModeChangeRequest, db: AsyncSession = Depends
             detail="LIVE SPOT đang bị khóa. Bạn phải xác nhận mở khóa trước khi chuyển sang LIVE."
         )
 
+    if target_mode != trading_controller.mode:
+        open_position_stmt = select(Position.id).where(Position.status == "OPEN")
+        open_position_id = (await db.execute(open_position_stmt)).scalars().first()
+        if open_position_id is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Hãy đóng các vị thế đang mở trước khi chuyển chế độ giao dịch."
+            )
+
     # Stop current bot if running before mode change
     if trading_controller.is_running:
         await trading_controller.stop()
+
+    backend_dir = Path(__file__).resolve().parents[2]
+    for env_path in (backend_dir / ".env", backend_dir.parent / ".env"):
+        if env_path.is_file():
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+            updated_lines = []
+            mode_written = False
+            for line in lines:
+                if line.startswith("TRADING_MODE=") or line.startswith("#TRADING_MODE="):
+                    if not mode_written:
+                        updated_lines.append(f"TRADING_MODE={target_mode}")
+                        mode_written = True
+                else:
+                    updated_lines.append(line)
+            if not mode_written:
+                updated_lines.append(f"TRADING_MODE={target_mode}")
+            env_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
     trading_controller.mode = target_mode
     settings.TRADING_MODE = target_mode
@@ -147,10 +178,14 @@ async def get_settings():
         "binance_testnet_key_masked": mask_secret(settings.BINANCE_TESTNET_API_KEY),
         "bot_allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
         "evaluation_interval_seconds": settings.EVALUATION_INTERVAL_SECONDS,
-        "quant_prefilter_enabled": settings.QUANT_PREFILTER_ENABLED,
         "scalping_mode_enabled": settings.SCALPING_MODE_ENABLED,
+        "scalping_timeframe": settings.SCALPING_TIMEFRAME,
+        "scalping_evaluation_interval_seconds": settings.SCALPING_EVALUATION_INTERVAL_SECONDS,
+        "scalping_position_monitor_interval_seconds": settings.SCALPING_POSITION_MONITOR_INTERVAL_SECONDS,
+        "scalping_min_net_risk_reward": settings.SCALPING_MIN_NET_RISK_REWARD,
         "target_take_profit_percent": settings.TARGET_TAKE_PROFIT_PERCENT,
         "target_stop_loss_percent": settings.TARGET_STOP_LOSS_PERCENT,
+        "ai_single_model_mode": settings.AI_SINGLE_MODEL_MODE,
         "max_risk_per_trade_percent": settings.MAX_RISK_PER_TRADE_PERCENT,
         "max_position_size_percent": settings.MAX_POSITION_SIZE_PERCENT,
         "daily_max_loss_percent": settings.DAILY_MAX_LOSS_PERCENT,
@@ -159,6 +194,13 @@ async def get_settings():
 
 @router.post("/settings")
 async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends(get_db)):
+    for field_name, value in (
+        ("Take Profit", req.target_take_profit_percent),
+        ("Stop Loss", req.target_stop_loss_percent),
+    ):
+        if value is not None and (not math.isfinite(value) or value < 0.05 or value > 20):
+            raise HTTPException(status_code=400, detail=f"{field_name} phải nằm trong khoảng 0.05% đến 20%.")
+
     if req.ai_base_url is not None:
         settings.AI_BASE_URL = req.ai_base_url
     if req.ai_api_key:
@@ -179,14 +221,14 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
         settings.BOT_ALLOCATED_CAPITAL_USDT = req.bot_allocated_capital
     if req.evaluation_interval_seconds is not None and req.evaluation_interval_seconds >= 30:
         settings.EVALUATION_INTERVAL_SECONDS = req.evaluation_interval_seconds
-    if req.quant_prefilter_enabled is not None:
-        settings.QUANT_PREFILTER_ENABLED = req.quant_prefilter_enabled
     if req.scalping_mode_enabled is not None:
         settings.SCALPING_MODE_ENABLED = req.scalping_mode_enabled
-    if req.target_take_profit_percent is not None and req.target_take_profit_percent > 0:
+    if req.target_take_profit_percent is not None:
         settings.TARGET_TAKE_PROFIT_PERCENT = round(req.target_take_profit_percent, 2)
-    if req.target_stop_loss_percent is not None and req.target_stop_loss_percent > 0:
+    if req.target_stop_loss_percent is not None:
         settings.TARGET_STOP_LOSS_PERCENT = round(req.target_stop_loss_percent, 2)
+    if req.ai_single_model_mode is not None:
+        settings.AI_SINGLE_MODEL_MODE = req.ai_single_model_mode
 
     # Update active client instances
     trading_controller.binance_client.set_credentials(
@@ -218,7 +260,7 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
                     "SCALPING_MODE_ENABLED": str(settings.SCALPING_MODE_ENABLED),
                     "TARGET_TAKE_PROFIT_PERCENT": str(settings.TARGET_TAKE_PROFIT_PERCENT),
                     "TARGET_STOP_LOSS_PERCENT": str(settings.TARGET_STOP_LOSS_PERCENT),
-                    "QUANT_PREFILTER_ENABLED": str(settings.QUANT_PREFILTER_ENABLED),
+                    "AI_SINGLE_MODEL_MODE": str(settings.AI_SINGLE_MODEL_MODE).lower(),
                 }
                 lines = text.splitlines()
                 new_lines = []
@@ -237,6 +279,7 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
             except Exception:
                 pass
 
+    trading_controller.refresh_schedule()
     await record_audit(db, "SETTINGS_UPDATED", "Cấu hình hệ thống đã được cập nhật thành công", "INFO")
     return {"status": "SUCCESS", "message": "Đã lưu cài đặt mới"}
 

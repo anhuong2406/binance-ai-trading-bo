@@ -36,10 +36,10 @@ export const SettingsPage: React.FC = () => {
   const [binanceTestnetSecret, setBinanceTestnetSecret] = useState('');
   const [allocatedCapital, setAllocatedCapital] = useState<string | number>(100.0);
   const [evalInterval, setEvalInterval] = useState(300);
-  const [quantPrefilter, setQuantPrefilter] = useState(true);
   const [scalpingMode, setScalpingMode] = useState(true);
-  const [targetTakeProfit, setTargetTakeProfit] = useState<string | number>(1.2);
+  const [targetTakeProfit, setTargetTakeProfit] = useState<string | number>(1.8);
   const [targetStopLoss, setTargetStopLoss] = useState<string | number>(1.0);
+  const [aiSingleModelMode, setAiSingleModelMode] = useState(true);
 
   // Trading Pairs State
   const [pairs, setPairs] = useState<any[]>([]);
@@ -65,10 +65,10 @@ export const SettingsPage: React.FC = () => {
       setGeminiModelId(s.gemini_model_id || 'gemini-3.8-flash');
       setAllocatedCapital(s.bot_allocated_capital || 100.0);
       setEvalInterval(s.evaluation_interval_seconds || 300);
-      setQuantPrefilter(s.quant_prefilter_enabled !== false);
       setScalpingMode(s.scalping_mode_enabled !== false);
-      setTargetTakeProfit(s.target_take_profit_percent !== undefined ? s.target_take_profit_percent : 1.2);
+      setTargetTakeProfit(s.target_take_profit_percent !== undefined ? s.target_take_profit_percent : 1.8);
       setTargetStopLoss(s.target_stop_loss_percent !== undefined ? s.target_stop_loss_percent : 1.0);
+      setAiSingleModelMode(s.ai_single_model_mode !== false);
     });
     loadPairs();
   }, []);
@@ -158,10 +158,10 @@ export const SettingsPage: React.FC = () => {
         gemini_model_id: geminiModelId,
         bot_allocated_capital: parseFloat(String(allocatedCapital).replace(',', '.')),
         evaluation_interval_seconds: evalInterval,
-        quant_prefilter_enabled: quantPrefilter,
         scalping_mode_enabled: scalpingMode,
         target_take_profit_percent: parseFloat(String(targetTakeProfit).replace(',', '.')),
         target_stop_loss_percent: parseFloat(String(targetStopLoss).replace(',', '.')),
+        ai_single_model_mode: aiSingleModelMode,
       };
 
       if (aiApiKey) payload.ai_api_key = aiApiKey;
@@ -227,7 +227,7 @@ export const SettingsPage: React.FC = () => {
 
             <div>
               <label className="block text-gray-400 mb-1">
-                AI số 1: Model ID Thẩm định (GPT-6 Luna / Reviewer):
+                AI số 1: Model ID Thẩm định bổ trợ (GPT-6 Luna):
               </label>
               <input
                 type="text"
@@ -240,7 +240,7 @@ export const SettingsPage: React.FC = () => {
 
             <div>
               <label className="block text-gray-400 mb-1">
-                AI số 2: Model ID Phân tích (Gemini Flash / Market Analyst):
+                AI số 2: Model ID Phân tích cơ hội (Gemini Flash):
               </label>
               <input
                 type="text"
@@ -250,6 +250,36 @@ export const SettingsPage: React.FC = () => {
               />
               <span className="text-[10px] text-gray-500">Mặc định: gemini-3.8-flash</span>
             </div>
+          </div>
+
+          {/* Single AI Mode Toggle Card */}
+          <div className="mt-4 p-3 rounded-lg border border-cyan-800/40 bg-cyan-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="w-5 h-5 text-bloomberg-cyan shrink-0 mt-0.5" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-gray-200">
+                    Chế Độ 1 Mô Hình Duy Nhất (Single AI: Gemini 3.8 Flash High)
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-600/40 font-bold">
+                    Tiết kiệm 50% Token
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 font-mono mt-0.5">
+                  Chỉ sử dụng duy nhất mô hình Gemini 3.8 Flash High để phân tích và đề xuất lệnh, bỏ qua hoàn toàn bước gọi GPT-6 Luna. Giúp bot phản hồi siêu tốc và tiết kiệm tối đa chi phí token 9Router.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAiSingleModelMode(!aiSingleModelMode)}
+              className={`w-12 h-6 flex items-center rounded-full p-1 transition cursor-pointer shrink-0 ${
+                aiSingleModelMode ? 'bg-bloomberg-cyan justify-end' : 'bg-gray-700 justify-start'
+              }`}
+            >
+              <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
+            </button>
           </div>
 
           {/* AI Test Results Feedback */}
@@ -504,38 +534,6 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quant Opportunity Pre-Filter Toggle */}
-        <div className="bg-bg-darker p-4 rounded-lg border border-bg-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="font-mono text-xs font-bold uppercase text-gray-200">
-                  Bộ Lọc Cơ Hội Tiết Kiệm Token (Quant Opportunity Pre-Filter)
-                </h4>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-600/40">
-                  Tiết kiệm 85-90% Token
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-400 font-mono mt-0.5">
-                Chỉ đánh thức Gemini 3.8 và GPT-6 Luna khi phát hiện tín hiệu kỹ thuật (quá bán, breakout, volume gom hàng). Khi thị trường cắm đầu giảm hoặc sideway vô hướng, Python tự động giữ HOLD mà không tốn token 9Router.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setQuantPrefilter(!quantPrefilter)}
-            className={`w-12 h-6 flex items-center rounded-full p-1 transition cursor-pointer shrink-0 ${
-              quantPrefilter ? 'bg-bloomberg-green justify-end' : 'bg-gray-700 justify-start'
-            }`}
-          >
-            <div className="w-4 h-4 rounded-full bg-white shadow-md"></div>
-          </button>
-        </div>
-
         {/* Scalping & Micro-Profit Settings (Tích tiểu thành đại) */}
         <div className="bg-bg-darker p-4 rounded-lg border border-bg-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-bg-border gap-2">
@@ -553,7 +551,7 @@ export const SettingsPage: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-400 font-mono mt-0.5">
-                  Mua đi bán lại liên tục trong các nhịp nảy sóng ngắn, chốt lời nhanh ở mức lãi nhỏ (+1.0% ~ +1.5%) để quay vòng vốn liên tục thay vì gồng chờ đỉnh xa.
+                  Dùng nến 1 phút, phân tích mỗi 60 giây và theo dõi SL/TP mỗi 5 giây. Lệnh chỉ qua Risk Engine khi RR ròng sau phí, spread và trượt giá đạt tối thiểu 1.1:1.
                 </p>
               </div>
             </div>
@@ -582,17 +580,17 @@ export const SettingsPage: React.FC = () => {
                   inputMode="decimal"
                   value={targetTakeProfit}
                   onChange={(e) => setTargetTakeProfit(e.target.value)}
-                  placeholder="VD: 1.2"
+                  placeholder="VD: 1.8"
                   className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-2 text-gray-100 font-bold focus:outline-none focus:border-bloomberg-green"
                 />
                 <span className="text-gray-400 font-bold">%</span>
               </div>
               <p className="text-[10px] text-gray-500 mt-1">
-                * Khuyến nghị: <strong>1.0% - 1.5%</strong>. Trừ phí sàn (~0.2%), mỗi vòng ăn ròng ~0.8% - 1.3%, tiền về ví ngay để quét lệnh mới.
+                * Mặc định 1.8% TP / 1.0% SL để bù phí taker và trượt giá dự kiến. Backend tự từ chối lệnh nếu RR ròng sau spread thực tế thấp hơn 1.1:1.
               </p>
-              {parseFloat(String(targetTakeProfit)) < 0.5 && (
+              {parseFloat(String(targetTakeProfit)) < 1.8 && (
                 <p className="text-[10px] text-amber-400 mt-1">
-                  ⚠️ Cảnh báo: TP &lt; 0.5% có thể bị phí sàn (~0.2%) ăn mòn lợi nhuận. Nên đặt ≥ 0.8%.
+                  ⚠️ TP dưới 1.8% có thể không đạt RR ròng tối thiểu; Risk Engine sẽ kiểm tra theo SL, phí, spread và trượt giá.
                 </p>
               )}
             </div>

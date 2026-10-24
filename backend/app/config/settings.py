@@ -56,23 +56,28 @@ class Settings(BaseSettings):
     GEMINI_MODEL_ID: str = "gemini-3.8-flash"
     GPT_REASONING_LEVEL: str = "high"
     GEMINI_REASONING_LEVEL: str = "high"
-    AI_TIMEOUT_SECONDS: int = 30
+    AI_TIMEOUT_SECONDS: int = 60
     AI_MAX_RETRIES: int = 3
     AI_MAX_TOKENS: int = 2048
     MAX_AI_COST_PER_DAY: float = 5.0
-    QUANT_PREFILTER_ENABLED: bool = True  # Cost optimizer: only calls LLMs when technical trigger occurs
+    AI_SINGLE_MODEL_MODE: bool = True            # True: Chỉ dùng duy nhất 1 mô hình Gemini 3.8 Flash High (0 call GPT, tiết kiệm 50% token)
 
     # Scalping & Micro-Profit Settings (Tích tiểu thành đại)
     SCALPING_MODE_ENABLED: bool = True           # Chế độ lướt sóng ăn mỏng chốt nhanh
-    TARGET_TAKE_PROFIT_PERCENT: float = 1.2      # Mặc định chốt lời +1.2% (trừ phí sàn 0.2% còn lãi ròng 1.0%)
+    TARGET_TAKE_PROFIT_PERCENT: float = 1.8      # Reference target for UI/prompts; actual TP follows structure and net-cost checks
     TARGET_STOP_LOSS_PERCENT: float = 1.0        # Mặc định cắt lỗ -1.0% bảo vệ vốn chặt chẽ
     SCALPING_COOLDOWN_MINUTES: int = 5           # Cooldown ngắn cho scalping (5 phút thay vì 20)
     SCALPING_MAX_DAILY_ENTRIES: int = 20         # Cho phép tối đa 20 lệnh/ngày khi scalping
+    SCALPING_MIN_NET_RISK_REWARD: float = 1.1
+    SCALPING_TIMEFRAME: str = "1m"
+    SCALPING_EVALUATION_INTERVAL_SECONDS: int = 60
+    SCALPING_POSITION_MONITOR_INTERVAL_SECONDS: int = 5
 
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
     MAX_RISK_PER_TRADE_PERCENT: float = 1.0     # 1% max risk per trade
     MAX_POSITION_SIZE_PERCENT: float = 25.0    # 25% max position value of bot capital
+    SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT: float = 5.0  # Exchange minimum exception, capped at 5 USDT
     DAILY_MAX_LOSS_PERCENT: float = 2.0        # 2% max daily loss of start equity
     MAX_DRAWDOWN_PERCENT: float = 5.0          # 5% max drawdown from peak equity
     MAX_CONCURRENT_POSITIONS: int = 2          # Max 2 concurrent bot positions
