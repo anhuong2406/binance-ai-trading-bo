@@ -2,12 +2,14 @@
 Execution Engine with Filter Validation & Idempotency Protection
 Enforces LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL, and handles timeout recovery.
 """
+import asyncio
 import uuid
 import time
 from typing import Dict, Any, Optional
 from decimal import Decimal, ROUND_DOWN
 import httpx
 from app.binance.client import BinanceSpotClient
+from app.config.settings import settings
 
 def round_step_size(quantity: Decimal, step_size: Decimal) -> Decimal:
     """Rounds down quantity strictly to the allowed stepSize."""
@@ -113,8 +115,13 @@ class ExecutionEngine:
                 new_client_order_id=client_order_id
             )
             return resp
-        except (httpx.TimeoutException, httpx.ConnectError) as exc:
-            # Query order by clientOrderId to verify if it got placed
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            # A 4xx response is a definite exchange rejection. A timeout,
+            # connection failure, or 5xx response can leave the order outcome
+            # unknown, so reconcile by clientOrderId instead of replaying POST.
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500:
+                raise
+
             for _ in range(3):
                 try:
                     reconciled = await self.client.query_order(
@@ -125,7 +132,9 @@ class ExecutionEngine:
                 except Exception:
                     await asyncio.sleep(1.5)
 
-            # Still indeterminate: raise safe error, freeze new orders
+            # Still indeterminate: freeze any subsequent order placement.
+            settings.EMERGENCY_STOP_ACTIVE = True
             raise RuntimeError(
-                f"Mất kết nối mạng khi gửi lệnh tới Binance. Trạng thái lệnh {client_order_id} chưa xác định. Hệ thống tự động đóng băng để bảo toàn tài sản!"
-            )
+                f"Không xác định được trạng thái lệnh {client_order_id} sau khi gửi tới Binance. "
+                "Đã bật Emergency Stop để chặn lệnh mới; cần đối soát trên Binance trước khi mở lại."
+            ) from exc

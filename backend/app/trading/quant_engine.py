@@ -422,7 +422,7 @@ class QuantEngine:
     ) -> Dict[str, Any]:
         """
         Multi-Timeframe Alignment Analysis.
-        HTF = Higher Timeframe (1h), LTF = Lower Timeframe (15m).
+        HTF = Higher Timeframe (1h), LTF = Lower Timeframe selected by the strategy.
 
         Returns alignment score and directional bias for BUY/SELL filter.
         Rules:
@@ -470,13 +470,6 @@ class QuantEngine:
             allow_buy = False
             note = "Không có xu hướng rõ ràng trên cả hai khung thời gian."
 
-        # Scalping Mode Override: Allow quick micro-rebounds in Sideway / Range markets
-        # Only hard-block if both HTF and LTF are collapsing in ALIGNED_BEARISH
-        if scalping_mode and not allow_buy and alignment != "ALIGNED_BEARISH":
-            allow_buy = True
-            bias = "BUY"
-            note = f"Chế độ Scalping Vi Mô: Cho phép mở lệnh lướt sóng ăn nhịp nảy (+1.2%) trong thị trường Sideway / Tích lũy."
-
         return {
             "alignment": alignment,
             "bias": bias,
@@ -486,6 +479,69 @@ class QuantEngine:
             "ltf_trend": ltf,
             "note": note
         }
+
+    @classmethod
+    def has_confirmed_scalping_reversal(
+        cls,
+        indicators: Dict[str, Any],
+        candles: List[Any]
+    ) -> bool:
+        """Confirm either an EMA reclaim or an early oversold bounce in neutral regimes."""
+        latest = indicators.get("latest", {})
+        series = indicators.get("series", {})
+        if len(candles) < 2:
+            return False
+
+        close = latest.get("close")
+        ema9 = latest.get("ema9")
+        ema21 = latest.get("ema21")
+        volume_ratio = latest.get("volume_ratio", 0.0)
+        if not all(isinstance(value, (int, float)) for value in (close, ema9, ema21, volume_ratio)):
+            return False
+
+        current, previous = candles[-1], candles[-2]
+        price_reclaimed = close > ema9
+        volume_confirmed = volume_ratio >= 0.4
+
+        stoch_k = latest.get("stoch_rsi_k")
+        stoch_d = latest.get("stoch_rsi_d")
+        k_series = series.get("stoch_rsi_k", [])
+        d_series = series.get("stoch_rsi_d", [])
+        stoch_cross = (
+            len(k_series) >= 2 and len(d_series) >= 2
+            and k_series[-2] is not None and d_series[-2] is not None
+            and stoch_k is not None and stoch_d is not None
+            and k_series[-2] <= d_series[-2] and stoch_k > stoch_d and stoch_k < 60
+        )
+        stoch_series_rising = (
+            len(k_series) >= 2
+            and k_series[-2] is not None
+            and stoch_k is not None
+            and stoch_k > k_series[-2]
+        )
+        bb_lower = latest.get("bb_lower")
+        bb_bounce = (
+            bb_lower is not None
+            and (previous.low <= bb_lower or current.low <= bb_lower)
+            and current.close > current.open
+        )
+        early_oversold_bounce = (
+            ((stoch_k is not None and stoch_k <= 30 and stoch_series_rising) or bb_bounce)
+            and current.close > current.open
+        )
+
+        macd_data = series.get("macd", {})
+        hist = macd_data.get("histogram", []) if isinstance(macd_data, dict) else []
+        macd_improving = len(hist) >= 2 and hist[-1] is not None and hist[-2] is not None and hist[-1] > hist[-2]
+
+        rsi14 = latest.get("rsi14")
+        rsi_oversold_bounce = (
+            rsi14 is not None and rsi14 <= 35 and current.close > current.open
+        )
+
+        momentum_confirmed = stoch_cross or macd_improving or early_oversold_bounce or rsi_oversold_bounce
+        price_confirmed = price_reclaimed or early_oversold_bounce
+        return price_confirmed and volume_confirmed and momentum_confirmed
 
     @classmethod
     def _compute_trend_bias(
@@ -567,11 +623,13 @@ class QuantEngine:
         adx = calculate_adx(highs, lows, closes, 14)
         session_info = detect_market_session()
 
-        # Volume ratio = current volume / 20-period volume SMA
+        # Volume ratio = effective recent volume / 20-period volume SMA
         vol_sma20 = calculate_sma(volumes, 20)
         cur_vol = volumes[-1]
+        completed_vol = volumes[-2] if len(volumes) >= 2 else cur_vol
         avg_vol = vol_sma20[-1] if vol_sma20[-1] else cur_vol
-        volume_ratio = (cur_vol / avg_vol) if avg_vol > 0 else 1.0
+        effective_vol = max(cur_vol, completed_vol)
+        volume_ratio = (effective_vol / avg_vol) if avg_vol > 0 else 1.0
 
         # Current values summary
         latest = {
@@ -614,104 +672,3 @@ class QuantEngine:
                 "adx": adx
             }
         }
-
-    @classmethod
-    def evaluate_opportunity_trigger(
-        cls,
-        indicators: Dict[str, Any],
-        candles: List[Any],
-        has_open_position: bool = False,
-        mtf_alignment: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Quant Opportunity Pre-Filter (Radar Sơ Tuyển Cơ Hội).
-        Evaluates whether current technical conditions justify waking up LLMs (Gemini & GPT-6 Luna).
-        If has_open_position is True: ALWAYS triggers AI to manage existing position.
-        If NO setup is detected: skips AI call and returns HOLD, saving ~7,000 tokens per evaluation.
-        """
-        if has_open_position:
-            return {
-                "has_opportunity": True,
-                "reasons": ["Đang có vị thế mở — Kích hoạt AI để quản lý thoát lệnh/chốt lời."]
-            }
-
-        latest = indicators.get("latest", {})
-        series = indicators.get("series", {})
-        triggers = []
-
-        close = latest.get("close", 0.0)
-        ema9 = latest.get("ema9")
-        ema21 = latest.get("ema21")
-        rsi14 = latest.get("rsi14")
-        stoch_k = latest.get("stoch_rsi_k")
-        stoch_d = latest.get("stoch_rsi_d")
-        macd_hist = latest.get("macd_hist")
-        bb_percent_b = latest.get("bb_percent_b")
-        volume_ratio = latest.get("volume_ratio", 1.0)
-        plus_di = latest.get("plus_di")
-        minus_di = latest.get("minus_di")
-        adx = latest.get("adx")
-
-        # Previous MACD histogram for momentum change
-        macd_data = series.get("macd")
-        macd_series = macd_data.get("histogram", []) if isinstance(macd_data, dict) else []
-        prev_macd_hist = macd_series[-2] if len(macd_series) >= 2 else None
-
-        # 1. Oversold / Dip Buying Opportunity
-        if rsi14 is not None and rsi14 <= 45.0:
-            triggers.append(f"RSI chạm vùng giá rẻ ({rsi14:.1f} <= 45)")
-        if stoch_k is not None and stoch_k <= 35.0:
-            triggers.append(f"StochRSI vùng quá bán (%K={stoch_k:.1f} <= 35)")
-        if stoch_k is not None and stoch_d is not None and stoch_k > stoch_d and stoch_k < 50.0:
-            triggers.append(f"StochRSI giao cắt vàng (%K={stoch_k:.1f} cắt lên %D={stoch_d:.1f})")
-
-        # 2. Bullish Momentum / EMA Breakout
-        if ema9 and ema21 and close > ema9 and ema9 > ema21:
-            triggers.append("Xu hướng tăng EMA9 > EMA21 và giá trên EMA9")
-        if macd_hist is not None and prev_macd_hist is not None and macd_hist > 0 and macd_hist > prev_macd_hist:
-            triggers.append("Động lượng MACD Histogram dương và đang mở rộng")
-        if plus_di and minus_di and adx and plus_di > minus_di and adx > 20:
-            triggers.append(f"Lực mua chiếm ưu thế (+DI={plus_di:.1f} > -DI={minus_di:.1f}, ADX={adx:.1f})")
-
-        # 3. Mean Reversion / Bollinger Bands
-        if bb_percent_b is not None and bb_percent_b <= 0.35:
-            triggers.append(f"Giá tiệm cận dải dưới Bollinger Band (%B={bb_percent_b:.2f})")
-        elif bb_percent_b is not None and bb_percent_b >= 0.75 and ema9 and close > ema9:
-            triggers.append(f"Giá bám dải trên Bollinger Band (%B={bb_percent_b:.2f})")
-
-        # 4. Volume Surge
-        if volume_ratio >= 1.25:
-            triggers.append(f"Khối lượng volume bùng nổ ({volume_ratio:.2f}x so với TB)")
-
-        # 5. Bullish Reversal Candlestick
-        if candles and len(candles) >= 2:
-            cur = candles[-1]
-            prev = candles[-2]
-            if cur.close > cur.open and cur.open < prev.close:
-                body = cur.close - cur.open
-                total_range = cur.high - cur.low
-                if total_range > 0 and (body / total_range) >= 0.6:
-                    triggers.append("Nến xanh thân đặc lực mua mạnh (Bullish Candlestick)")
-
-        # 6. Multi-Timeframe Alignment Bonus
-        if mtf_alignment and mtf_alignment.get("allow_buy") is True:
-            triggers.append(f"Khung lớn 1H và 15M đồng thuận TĂNG ({mtf_alignment.get('alignment')})")
-
-        has_opportunity = len(triggers) > 0
-        if has_opportunity:
-            return {
-                "has_opportunity": True,
-                "reasons": triggers,
-                "trigger_count": len(triggers),
-                "summary": " | ".join(triggers[:3])
-            }
-        else:
-            return {
-                "has_opportunity": False,
-                "reasons": [],
-                "trigger_count": 0,
-                "reason": (
-                    "Radar Định Lượng: Thị trường chưa có tín hiệu kỹ thuật (không quá bán, không breakout, volume thấp). "
-                    "Tự động giữ HOLD, tiết kiệm ~7,000 token."
-                )
-            }

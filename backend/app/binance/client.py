@@ -105,6 +105,8 @@ class BinanceSpotClient:
 
                     # Detect rate limits
                     if resp.status_code in (429, 418):
+                        if method.upper() == "POST":
+                            resp.raise_for_status()
                         retry_after = int(resp.headers.get("Retry-After", 10))
                         await asyncio.sleep(retry_after)
                         continue
@@ -122,11 +124,14 @@ class BinanceSpotClient:
                     resp.raise_for_status()
                     return resp.json()
             except httpx.HTTPStatusError as e:
-                if attempt == retries:
+                # Never blindly replay an order placement after an HTTP error.
+                # ExecutionEngine reconciles uncertain POST outcomes by clientOrderId.
+                if method.upper() == "POST" or attempt == retries:
                     raise e
                 await asyncio.sleep(1.0 * (2 ** attempt))
-            except (httpx.ConnectError, httpx.TimeoutException) as e:
-                if attempt == retries:
+            except httpx.TransportError as e:
+                # A POST may have reached Binance even if its response was lost.
+                if method.upper() == "POST" or attempt == retries:
                     raise e
                 await asyncio.sleep(1.0 * (2 ** attempt))
 

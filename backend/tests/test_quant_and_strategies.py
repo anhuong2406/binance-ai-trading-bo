@@ -197,3 +197,34 @@ async def test_scalping_take_profit_and_stop_loss():
         assert actions_sl[0]["action"] == "CLOSED"
         assert actions_sl[0]["reason"] == "STOP_LOSS_TRIGGERED"
         assert actions_sl[0]["symbol"] == "BTCUSDT"
+
+
+@pytest.mark.asyncio
+async def test_scalping_reversal_confirmation_with_oversold_bounce():
+    from app.trading.quant_engine import QuantEngine
+    from app.binance.market_data import Candle
+    
+    candles = [
+        Candle(open_time=1, open_=100.0, high=101.0, low=98.0, close=98.5, volume=500.0, close_time=2),
+        Candle(open_time=3, open_=98.5, high=99.5, low=98.0, close=99.2, volume=600.0, close_time=4)
+    ]
+    indicators = {
+        "latest": {
+            "close": 99.2,
+            "ema9": 99.5,
+            "ema21": 100.0,
+            "volume_ratio": 0.6,
+            "stoch_rsi_k": 22.0,
+            "stoch_rsi_d": 18.0,
+            "bb_lower": 98.2,
+            "rsi14": 32.0
+        },
+        "series": {
+            "stoch_rsi_k": [15.0, 22.0],
+            "stoch_rsi_d": [14.0, 18.0],
+            "macd": {"histogram": [-0.5, -0.2]}
+        }
+    }
+    
+    is_confirmed = QuantEngine.has_confirmed_scalping_reversal(indicators, candles)
+    assert is_confirmed is True

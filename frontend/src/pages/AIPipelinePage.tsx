@@ -27,6 +27,9 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
   const [availablePairs, setAvailablePairs] = useState<string[]>(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT']);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentGeminiError = currentReport?.steps?.gemini_analyst?.status === 'FAIL'
+    ? currentReport.steps.gemini_analyst.error
+    : null;
 
   useEffect(() => {
     api.getPairsList().then((res) => {
@@ -118,17 +121,23 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
         </div>
       )}
 
+      {currentGeminiError && (
+        <div className="p-3 bg-bloomberg-red/20 border border-bloomberg-red/40 rounded-lg text-xs font-mono text-red-300">
+          Gemini không hoàn tất phân tích chu kỳ hiện tại: {currentGeminiError}
+        </div>
+      )}
+
       {/* Informational Banner on Pipeline Status */}
       {selectedLog?.consensus_action === 'HOLD' && (
         <div className="p-3 bg-cyan-950/30 border border-cyan-700/40 rounded-lg text-xs font-mono text-cyan-200 flex items-start gap-2.5">
           <Scale className="w-4 h-4 text-bloomberg-cyan shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <span className="font-bold text-bloomberg-cyan">
-              Chu kỳ phân tích hoàn tất: Đồng thuận ĐỨNG NGOÀI (HOLD)
+              Chu kỳ phân tích hoàn tất: Chưa có setup đủ điều kiện (HOLD)
             </span>
             <p className="text-2xs text-gray-400">
-              Cả hai AI (Gemini Analyst & GPT-6 Luna) nhận diện thị trường đang trong xu hướng giảm hoặc không đạt tỷ lệ Lợi nhuận / Rủi ro (R:R &gt;= 1.8).
-              Trong giao dịch Spot, hệ thống <strong>chủ động dừng lệnh mua để bảo toàn vốn tuyệt đối</strong>, tránh bẫy bắt dao rơi. Lệnh chỉ chuyển sang bước Khớp Lệnh khi thị trường hình thành điểm mua an toàn.
+              Gemini chưa đề xuất lệnh phù hợp hoặc GPT thẩm định thấy cần chờ thêm dữ liệu/điều kiện an toàn chưa đạt.
+              Hệ thống Spot sẽ đứng ngoài cho đến khi có setup được xác nhận; đây không phải lệnh bị Risk Engine từ chối.
             </p>
           </div>
         </div>
@@ -137,14 +146,21 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
       {/* Pipeline Visualizer Component */}
       <PipelineVisualizer lastReport={currentReport || lastReport} />
 
-      {/* Dual AI Debate Card for Selected Log */}
+      {/* Complementary AI Review Card for Selected Log */}
       {selectedLog ? (
-        <LiveDebateCard
-          geminiOutput={selectedLog.gemini_output}
-          gptOutput={selectedLog.gpt_output}
-          consensusAction={selectedLog.consensus_action}
-          rejectionReason={selectedLog.rejection_reason || undefined}
-        />
+        <>
+          {currentGeminiError && (
+            <p className="text-[11px] font-mono text-amber-300">
+              Bên dưới là log AI đã lưu trước đó; chu kỳ hiện tại lỗi trước khi có kết quả Gemini.
+            </p>
+          )}
+          <LiveDebateCard
+            geminiOutput={selectedLog.gemini_output}
+            gptOutput={selectedLog.gpt_output}
+            consensusAction={selectedLog.consensus_action}
+            rejectionReason={selectedLog.rejection_reason || undefined}
+          />
+        </>
       ) : lastReport?.steps?.gemini_analyst?.output ? (
         <LiveDebateCard
           geminiOutput={lastReport.steps.gemini_analyst.output}
@@ -173,7 +189,7 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
                   <th className="pb-2">Thời gian</th>
                   <th className="pb-2">Cặp</th>
                   <th className="pb-2">Khung</th>
-                  <th className="pb-2">Đồng thuận</th>
+                  <th className="pb-2">Kết quả thẩm định</th>
                   <th className="pb-2">Phê duyệt</th>
                   <th className="pb-2">Độ trễ (Gemini / GPT)</th>
                   <th className="pb-2">Tokens</th>
@@ -208,7 +224,11 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
                       </span>
                     </td>
                     <td className="py-2.5">
-                      {l.execution_approved ? (
+                      {l.consensus_action === 'HOLD' ? (
+                        <span className="text-gray-400 flex items-center gap-1">
+                          <span aria-hidden="true">—</span> STANDBY
+                        </span>
+                      ) : l.execution_approved ? (
                         <span className="text-bloomberg-green flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" /> PASS
                         </span>

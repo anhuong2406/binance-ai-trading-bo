@@ -11,6 +11,7 @@ from app.config.settings import settings
 from app.database.session import get_db, record_audit
 from app.database.models import RiskEvaluation
 from app.trading.risk_engine import risk_engine
+from app.scheduler.controller import trading_controller
 
 router = APIRouter(prefix="/api/risk", tags=["Risk"])
 
@@ -27,18 +28,32 @@ class RiskConfigUpdate(BaseModel):
 async def get_risk_status(db: AsyncSession = Depends(get_db)):
     """Fetch current risk metrics and thresholds."""
     stat = await risk_engine.get_or_create_daily_stat(db, settings.BOT_ALLOCATED_CAPITAL_USDT)
+    mode_metrics = await risk_engine.get_mode_daily_metrics(db, stat, trading_controller.mode)
+    today_trade_count = await risk_engine.get_today_entry_count(db, trading_controller.mode)
+    max_daily_entries = (
+        settings.SCALPING_MAX_DAILY_ENTRIES
+        if settings.SCALPING_MODE_ENABLED else settings.MAX_DAILY_ENTRIES
+    )
+    cooldown_minutes = (
+        settings.SCALPING_COOLDOWN_MINUTES
+        if settings.SCALPING_MODE_ENABLED else settings.COOLDOWN_MINUTES
+    )
     return {
         "allocated_capital": settings.BOT_ALLOCATED_CAPITAL_USDT,
         "max_risk_per_trade_percent": settings.MAX_RISK_PER_TRADE_PERCENT,
         "max_position_size_percent": settings.MAX_POSITION_SIZE_PERCENT,
+        "small_balance_min_notional_exception_usdt": settings.SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT,
         "daily_max_loss_percent": settings.DAILY_MAX_LOSS_PERCENT,
         "max_drawdown_percent": settings.MAX_DRAWDOWN_PERCENT,
         "max_concurrent_positions": settings.MAX_CONCURRENT_POSITIONS,
-        "max_daily_entries": settings.MAX_DAILY_ENTRIES,
-        "cooldown_minutes": settings.COOLDOWN_MINUTES,
-        "current_drawdown_percent": stat.max_drawdown_percent,
-        "today_trade_count": stat.trade_count,
-        "today_loss_percent": ((stat.start_equity - stat.current_equity) / stat.start_equity * 100) if stat.start_equity > 0 else 0.0,
+        "max_daily_entries": max_daily_entries,
+        "cooldown_minutes": cooldown_minutes,
+        "trading_mode": trading_controller.mode,
+        "scalping_mode_enabled": settings.SCALPING_MODE_ENABLED,
+        "current_drawdown_percent": mode_metrics["drawdown_percent"],
+        "today_trade_count": today_trade_count,
+        "today_loss_percent": mode_metrics["daily_loss_percent"],
+        "today_pnl_percent": mode_metrics["daily_pnl_percent"],
         "emergency_stop_active": settings.EMERGENCY_STOP_ACTIVE,
         "live_locked": settings.LIVE_SPOT_LOCKED
     }

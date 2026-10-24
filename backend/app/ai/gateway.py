@@ -74,6 +74,7 @@ class AIGateway:
             raise ValueError("Chưa cấu hình AI API Key!")
 
         active_base = self.resolve_base_url(self.base_url or settings.AI_BASE_URL, active_key)
+        active_timeout = float(settings.AI_TIMEOUT_SECONDS or self.timeout or 90.0)
         endpoint = f"{active_base}/chat/completions"
         headers = {
             "Authorization": f"Bearer {active_key}",
@@ -105,7 +106,7 @@ class AIGateway:
         for attempt in range(self.max_retries):
             start_time = time.time()
             try:
-                async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
+                async with httpx.AsyncClient(timeout=active_timeout) as client:
                     resp = await client.post(endpoint, json=payload, headers=headers)
                     
                     # If unauthorized or not found, fail immediately without retrying
@@ -142,11 +143,35 @@ class AIGateway:
                 raise ve
             except Exception as e:
                 last_error = e
+                # A timeout already consumed the full per-attempt budget. Retrying
+                # the same slow model route repeatedly can stall a 1m scalping cycle.
+                if isinstance(e, httpx.TimeoutException):
+                    break
                 # Wait briefly before retry
                 import asyncio
                 await asyncio.sleep(0.5 * (attempt + 1))
 
-        raise RuntimeError(f"Lỗi gọi AI Model [{model_id}]: {str(last_error)}")
+        if isinstance(last_error, httpx.TimeoutException):
+            error_detail = f"{type(last_error).__name__} sau {self.timeout}s"
+        elif isinstance(last_error, httpx.HTTPStatusError):
+            response = last_error.response
+            try:
+                body = response.json()
+                error_obj = body.get("error", body) if isinstance(body, dict) else body
+                message = error_obj.get("message") if isinstance(error_obj, dict) else str(error_obj)
+            except Exception:
+                message = response.text.strip()
+            error_detail = f"HTTP {response.status_code}"
+            if message:
+                error_detail += f": {str(message)[:400]}"
+        else:
+            message = str(last_error).strip() if last_error is not None else ""
+            error_detail = message or (
+                f"{type(last_error).__name__} (exception không có thông báo chi tiết)"
+                if last_error is not None else "Không nhận được phản hồi từ Gateway"
+            )
+
+        raise RuntimeError(f"Lỗi gọi AI Model [{model_id}]: {error_detail}")
 
     async def test_connection(
         self,

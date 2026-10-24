@@ -57,7 +57,8 @@ class PositionManager:
         position_id: int,
         exit_price: Decimal,
         exit_fee: Decimal,
-        reason: str
+        reason: str,
+        quantity: Optional[Decimal] = None
     ) -> Position:
         stmt = select(Position).where(Position.id == position_id)
         result = await session.execute(stmt)
@@ -65,19 +66,29 @@ class PositionManager:
         if not pos or pos.status != "OPEN":
             raise ValueError(f"Vị thế #{position_id} không tồn tại hoặc đã đóng.")
 
-        existing_fee = pos.total_fee or Decimal("0.0")
-        gross_pnl = (exit_price - pos.entry_price) * pos.amount
-        net_pnl = gross_pnl - existing_fee - exit_fee
-        invested = pos.entry_price * pos.amount
-        pnl_pct = float(net_pnl / invested * 100) if invested > 0 else 0.0
+        existing_amount = Decimal(pos.amount)
+        amount_to_close = existing_amount if quantity is None else Decimal(quantity)
+        if amount_to_close <= 0 or amount_to_close > existing_amount:
+            raise ValueError("Khối lượng đóng vị thế không hợp lệ.")
+
+        existing_fee = Decimal(pos.total_fee or 0)
+        entry_fee_allocated = existing_fee * amount_to_close / existing_amount
+        gross_pnl = (exit_price - pos.entry_price) * amount_to_close
+        net_pnl = gross_pnl - entry_fee_allocated - exit_fee
+        pnl_pct = float(net_pnl / (pos.entry_price * amount_to_close) * 100) if amount_to_close > 0 else 0.0
 
         pos.current_price = exit_price
-        pos.realized_pnl = net_pnl
+        pos.realized_pnl = Decimal(pos.realized_pnl or 0) + net_pnl
         pos.realized_pnl_percent = pnl_pct
-        pos.unrealized_pnl = Decimal("0.0")
-        pos.total_fee = existing_fee + exit_fee
-        pos.status = "CLOSED"
-        pos.closed_at = utc_now()
+        pos.amount = existing_amount - amount_to_close
+        pos.unrealized_pnl = (exit_price - pos.entry_price) * pos.amount
+        pos.total_fee = existing_fee - entry_fee_allocated
+        fully_closed = pos.amount == 0
+        if fully_closed:
+            pos.unrealized_pnl = Decimal("0.0")
+            pos.total_fee = existing_fee + exit_fee
+            pos.status = "CLOSED"
+            pos.closed_at = utc_now()
         pos.close_reason = reason
 
         # Update daily stats
@@ -87,16 +98,18 @@ class PositionManager:
         stat = daily_res.scalar_one_or_none()
 
         if stat:
-            stat.trade_count += 1
-            if net_pnl > 0:
-                stat.win_count += 1
-            else:
-                stat.loss_count += 1
             stat.daily_pnl += float(net_pnl)
-            stat.total_fees += float(pos.total_fee)
+            stat.total_fees += float(entry_fee_allocated + exit_fee)
             stat.current_equity += float(net_pnl)
             if stat.current_equity > stat.peak_equity:
                 stat.peak_equity = stat.current_equity
+
+            if fully_closed:
+                stat.trade_count += 1
+                if pos.realized_pnl > 0:
+                    stat.win_count += 1
+                else:
+                    stat.loss_count += 1
             
             # Recalculate drawdown
             if stat.peak_equity > 0:
@@ -107,6 +120,59 @@ class PositionManager:
         await session.commit()
         await session.refresh(pos)
         return pos
+
+    @classmethod
+    async def _execute_exit(
+        cls,
+        session: AsyncSession,
+        position: Position,
+        market_price: Decimal,
+        reason: str,
+        execution_engine: Any = None
+    ) -> Optional[Position]:
+        """Close only the quantity actually sold; keep the position open on failure."""
+        quantity = Decimal(position.amount)
+        exit_price = market_price
+
+        if position.mode in ("LIVE", "TESTNET"):
+            if execution_engine is None:
+                logger.error("Thiếu execution engine khi đóng vị thế %s ở %s", position.symbol, position.mode)
+                return None
+            try:
+                response = await execution_engine.execute_spot_order(
+                    symbol=position.symbol,
+                    side="SELL",
+                    order_type="MARKET",
+                    quantity=quantity
+                )
+            except Exception as e:
+                logger.error("Lỗi gửi lệnh SELL %s trên Binance (%s): %s", reason, position.symbol, e)
+                return None
+
+            executed_qty = Decimal(str(response.get("executedQty", "0")))
+            quote_qty = Decimal(str(response.get("cummulativeQuoteQty", "0")))
+            if executed_qty <= 0:
+                logger.error("Lệnh SELL %s chưa khớp (%s): %s", reason, position.symbol, response.get("status"))
+                return None
+
+            quantity = min(executed_qty, quantity)
+            if quote_qty > 0:
+                exit_price = quote_qty / executed_qty
+                closed_quote = quote_qty * quantity / executed_qty
+                exit_fee = closed_quote * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+            else:
+                exit_fee = quantity * exit_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+        else:
+            exit_fee = quantity * exit_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+
+        return await cls.close_position(
+            session=session,
+            position_id=position.id,
+            exit_price=exit_price,
+            exit_fee=exit_fee,
+            reason=reason,
+            quantity=quantity
+        )
 
     @classmethod
     async def update_active_positions(
@@ -143,29 +209,17 @@ class PositionManager:
 
             # Check Stop Loss
             if pos.stop_loss and dec_price <= pos.stop_loss:
-                # In LIVE mode, execute real market sell on Binance
-                if execution_engine and pos.mode == "LIVE":
-                    try:
-                        await execution_engine.execute_spot_order(
-                            symbol=pos.symbol,
-                            side="SELL",
-                            order_type="MARKET",
-                            quantity=pos.amount
-                        )
-                    except Exception as e:
-                        logger.error(f"Lỗi gửi lệnh Market SELL Stop Loss trên Binance ({pos.symbol}): {e}")
-
-                # Trigger Stop Loss
-                exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
-                closed = await cls.close_position(
+                closed = await cls._execute_exit(
                     session=session,
-                    position_id=pos.id,
-                    exit_price=dec_price,
-                    exit_fee=exit_fee,
-                    reason="STOP_LOSS_TRIGGERED"
+                    position=pos,
+                    market_price=dec_price,
+                    reason="STOP_LOSS_TRIGGERED",
+                    execution_engine=execution_engine
                 )
+                if closed is None:
+                    continue
                 actions_taken.append({
-                    "action": "CLOSED",
+                    "action": "CLOSED" if closed.status == "CLOSED" else "PARTIALLY_CLOSED",
                     "reason": "STOP_LOSS_TRIGGERED",
                     "position_id": closed.id,
                     "symbol": closed.symbol,
@@ -175,29 +229,17 @@ class PositionManager:
 
             # Check Take Profit
             if pos.take_profit and dec_price >= pos.take_profit:
-                # In LIVE mode, execute real market sell on Binance
-                if execution_engine and pos.mode == "LIVE":
-                    try:
-                        await execution_engine.execute_spot_order(
-                            symbol=pos.symbol,
-                            side="SELL",
-                            order_type="MARKET",
-                            quantity=pos.amount
-                        )
-                    except Exception as e:
-                        logger.error(f"Lỗi gửi lệnh Market SELL Take Profit trên Binance ({pos.symbol}): {e}")
-
-                # Trigger Take Profit
-                exit_fee = pos.amount * dec_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
-                closed = await cls.close_position(
+                closed = await cls._execute_exit(
                     session=session,
-                    position_id=pos.id,
-                    exit_price=dec_price,
-                    exit_fee=exit_fee,
-                    reason="TAKE_PROFIT_TRIGGERED"
+                    position=pos,
+                    market_price=dec_price,
+                    reason="TAKE_PROFIT_TRIGGERED",
+                    execution_engine=execution_engine
                 )
+                if closed is None:
+                    continue
                 actions_taken.append({
-                    "action": "CLOSED",
+                    "action": "CLOSED" if closed.status == "CLOSED" else "PARTIALLY_CLOSED",
                     "reason": "TAKE_PROFIT_TRIGGERED",
                     "position_id": closed.id,
                     "symbol": closed.symbol,

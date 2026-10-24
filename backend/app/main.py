@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     
     # Hook up websocket broadcast callback
     trading_controller.set_ws_broadcast(ws_manager.broadcast)
+    await trading_controller.resume_position_monitoring()
 
     async with AsyncSessionLocal() as session:
         await record_audit(

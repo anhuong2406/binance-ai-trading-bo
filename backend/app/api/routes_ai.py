@@ -110,7 +110,7 @@ async def trigger_manual_analysis(
         result = await trading_controller.decision_engine.execute_cycle(
             session=db,
             symbol=symbol,
-            timeframe=settings.DEFAULT_TIMEFRAME,
+            timeframe=(settings.SCALPING_TIMEFRAME if settings.SCALPING_MODE_ENABLED else settings.DEFAULT_TIMEFRAME),
             mode=trading_controller.mode
         )
         return {"status": "SUCCESS", "result": result}

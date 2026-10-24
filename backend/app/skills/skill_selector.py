@@ -8,6 +8,7 @@ from app.skills.skill_registry import skill_registry
 from app.skills.skill_executor import skill_executor
 from app.skills.skill_validator import skill_validator
 from app.skills.skill_audit import skill_audit
+from app.config.settings import settings
 
 class SkillSelector:
     """Selects and compiles skill heuristics and calculations for each AI agent."""
@@ -140,14 +141,21 @@ class SkillSelector:
             ltf = mtf.get("ltf_trend", {})
             htf_state = "TĂNG (BULLISH)" if htf.get("bullish") else ("GIẢM (BEARISH)" if htf.get("bearish") else "ĐI NGANG (SIDEWAYS)")
             ltf_state = "TĂNG (BULLISH)" if ltf.get("bullish") else ("GIẢM (BEARISH)" if ltf.get("bearish") else "ĐI NGANG (SIDEWAYS)")
+            ltf_label = settings.SCALPING_TIMEFRAME if settings.SCALPING_MODE_ENABLED else "15m"
+            mtf_rule = (
+                f"Trong scalping ({ltf_label}), ưu tiên BUY khi có tín hiệu tăng hoặc nhịp nảy kỹ thuật xác nhận (reversal / mean reversion). "
+                f"Nếu allow_buy = True hoặc có tín hiệu bật nảy từ hỗ trợ/quá bán (RSI < 35, Stoch < 30, chạm dải dưới BB), "
+                f"được phép đề xuất BUY với mục tiêu TP đủ bù phí sàn và SL chặt chẽ ({settings.TARGET_STOP_LOSS_PERCENT}%)."
+                if settings.SCALPING_MODE_ENABLED else
+                "Chỉ BUY khi allow_buy = True và không có tín hiệu HTF bearish; tránh BUY ngược xu hướng lớn."
+            )
             guidelines.append(
-                f"[MULTI-TIMEFRAME CONFIRMATION (1H vs 15M)]:\n"
+                f"[MULTI-TIMEFRAME CONFIRMATION (1H vs {ltf_label})]:\n"
                 f"  - Khung lớn 1H (HTF): {htf_state} | EMA9={htf.get('ema9')} | RSI={htf.get('rsi')} | ADX={htf.get('adx')}\n"
-                f"  - Khung ngắn 15M (LTF): {ltf_state} | EMA9={ltf.get('ema9')} | RSI={ltf.get('rsi')} | ADX={ltf.get('adx')}\n"
+                f"  - Khung ngắn {ltf_label} (LTF): {ltf_state} | EMA9={ltf.get('ema9')} | RSI={ltf.get('rsi')} | ADX={ltf.get('adx')}\n"
                 f"  - Trạng thái liên khung: {mtf.get('alignment')} (Sức mạnh đồng thuận: {mtf.get('alignment_strength')}/100)\n"
                 f"  - Đánh giá MTF: {mtf.get('note')}\n"
-                f"  - QUY TẮC BẮT BUỘC: CHỈ đề xuất BUY khi allow_buy = True (Cả 1H và 15M đồng thuận TĂNG). "
-                f"Tuyệt đối KHÔNG BUY nếu khung 1H đang GIẢM để tránh bắt dao rơi!"
+                f"  - QUY TẮC BẮT BUỘC: {mtf_rule}"
             )
 
         if "stoch_rsi" in quant_results:
@@ -169,10 +177,18 @@ class SkillSelector:
                 f"Lưu ý: {ms.get('recommendation')}"
             )
 
-        guidelines.append(
-            "YÊU CẦU CHIẾN LƯỢC: Nếu Regime là RANGING_HIGH_VOL (Q4 Choppy Chaos) hoặc Choppiness Index > 61.8, "
-            "bắt buộc ưu tiên đề xuất HOLD để tránh bị quét stop loss trong vùng giật hỗn loạn."
-        )
+        if settings.SCALPING_MODE_ENABLED:
+            guidelines.append(
+                "YÊU CẦU CHIẾN LƯỢC SCALPING: Chỉ coi RANGING_HIGH_VOL (Q4 Choppy Chaos), thanh khoản không đủ, "
+                "tín hiệu đảo chiều chưa xác nhận hoặc RR ròng không đạt ngưỡng là lý do HOLD. "
+                "Choppiness Index > 61.8 một mình không phải lệnh cấm BUY: RANGING_LOW_VOL có thể tạo setup hồi giá, "
+                "nhưng phải có xác nhận kỹ thuật và chi phí giao dịch phù hợp."
+            )
+        else:
+            guidelines.append(
+                "YÊU CẦU CHIẾN LƯỢC: Nếu Regime là RANGING_HIGH_VOL (Q4 Choppy Chaos) hoặc Choppiness Index > 61.8, "
+                "bắt buộc ưu tiên đề xuất HOLD để tránh bị quét stop loss trong vùng giật hỗn loạn."
+            )
 
         return "\n".join(guidelines)
 
@@ -197,18 +213,26 @@ class SkillSelector:
         if "regime_detection" in quant_results:
             reg = quant_results["regime_detection"]
             guidelines.append(
-                f"[REGIME VETO]: Nếu Gemini đề xuất BUY nhưng thị trường đang ở {reg['regime']} ({reg['quadrant']}) "
-                f"hoặc OBI < -0.2 (áp lực bán đè nặng sổ lệnh), bạn có toàn quyền VETO / REJECT hoặc hạ về HOLD."
+                f"[REGIME REVIEW]: Regime hiện tại là {reg['regime']} ({reg['quadrant']}). "
+                f"Chỉ VETO BUY nếu regime là RANGING_HIGH_VOL / Q4_CHOPPY_CHAOS hoặc OBI < -0.2 "
+                f"(áp lực bán mạnh); RANGING_LOW_VOL không tự động cấm scalping nếu có đảo chiều xác nhận và RR ròng đạt chuẩn."
             )
 
         if "multi_timeframe_alignment" in quant_results:
             mtf = quant_results["multi_timeframe_alignment"]
+            ltf_label = settings.SCALPING_TIMEFRAME if settings.SCALPING_MODE_ENABLED else "15m"
+            veto_rule = (
+                f"Trong scalping ({ltf_label}), cho phép BUY khi xuất hiện nhịp nảy kỹ thuật tại vùng hỗ trợ/quá bán với SL chặt. "
+                f"Chỉ VETO/REJECT nếu thị trường đang rơi tự do không có lực đỡ hoặc spread quá cao (> 0.15%)."
+                if settings.SCALPING_MODE_ENABLED else
+                f"Nếu Gemini đề xuất BUY nhưng allow_buy = False hoặc khung lớn 1H đang là DOWNTREND/BEARISH, "
+                f"bạn BẮT BUỘC PHẢI REJECT hoặc yêu cầu HOLD để bảo vệ vốn khỏi xu hướng giảm lớn."
+            )
             guidelines.append(
-                f"[MULTI-TIMEFRAME RISK VETO (1H vs 15M)]:\n"
+                f"[MULTI-TIMEFRAME RISK VETO (1H vs {ltf_label})]:\n"
                 f"  - Trạng thái liên khung: {mtf.get('alignment')} (allow_buy = {mtf.get('allow_buy')})\n"
                 f"  - Đánh giá: {mtf.get('note')}\n"
-                f"  - QUY TẮC THẨM ĐỊNH: Nếu Gemini đề xuất BUY nhưng allow_buy = False hoặc khung lớn 1H đang là DOWNTREND/BEARISH, "
-                f"bạn BẮT BUỘC PHẢI REJECT hoặc yêu cầu HOLD để bảo vệ vốn khỏi xu hướng giảm lớn."
+                f"  - QUY TẮC THẨM ĐỊNH: {veto_rule}"
             )
 
         if "market_session" in quant_results:

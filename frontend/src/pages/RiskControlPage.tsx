@@ -87,7 +87,7 @@ export const RiskControlPage: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono px-3 py-1 rounded bg-bg-card border border-bg-border text-bloomberg-cyan">
-            Small Balance Mode: BẬT
+            {riskStatus?.trading_mode || 'PAPER'} · Scalping: {riskStatus?.scalping_mode_enabled ? 'BẬT' : 'TẮT'}
           </span>
         </div>
       </div>
@@ -142,7 +142,8 @@ export const RiskControlPage: React.FC = () => {
             />
           </div>
           <span className="text-[11px] font-mono text-gray-500 mt-1.5 block">
-            Giới hạn ngày: {riskStatus?.daily_max_loss_percent}% vốn đầu ngày
+            P&amp;L hôm nay: {((riskStatus?.today_pnl_percent || 0) >= 0 ? '+' : '')}
+            {riskStatus?.today_pnl_percent?.toFixed(2) || '0.00'}% · Giới hạn lỗ: {riskStatus?.daily_max_loss_percent}%
           </span>
         </div>
 

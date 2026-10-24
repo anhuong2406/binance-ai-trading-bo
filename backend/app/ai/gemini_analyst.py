@@ -1,7 +1,7 @@
 """
 Gemini Market Analyst (AI số 2)
-Chief Market Analyst / Strategy Generator
-Analyzes technical indicators, market state, generates trade plan with SL/TP.
+Opportunity Analyst / Strategy Generator
+Finds candidate setups and gives GPT-6 Luna a clear, evidence-based plan to review.
 """
 import json
 from typing import Dict, Any, Tuple, Optional
@@ -14,14 +14,15 @@ Mục tiêu: Phân tích kỹ thuật, cấu trúc nến, khối lượng và bi
 Yêu cầu nghiêm ngặt:
 1. Nhận diện trạng thái thị trường: TRENDING, RANGING, VOLATILE hoặc UNCERTAIN.
 2. Đánh giá sức mạnh xu hướng (0-100).
-3. Đề xuất action:
+3. Đề xuất action độc lập, không cần dự đoán trước GPT sẽ chọn gì:
    - "BUY": Mở vị thế Spot khi có lợi thế rõ rệt.
    - "SELL": Thoát vị thế Spot nếu đang có tín hiệu đảo chiều hoặc rủi ro.
    - "HOLD": Giữ nguyên trạng thái, kiên nhẫn quan sát khi thị trường nhiễu.
 4. Nếu BUY: Bắt buộc cung cấp entry_price, stop_loss hợp lý (dưới hỗ trợ/dựa trên ATR), take_profit, và validity_minutes (thời hạn hiệu lực từ 15-60 phút).
 5. Nêu rõ ít nhất 2 điều kiện làm kế hoạch mất hiệu lực (invalidation_conditions).
-6. Viết reasoning bằng Tiếng Việt súc tích, chuyên nghiệp theo phong cách Quantitative Trading.
-7. ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN với các trường sau, KHÔNG ĐƯỢC CÓ KÝ TỰ NÀO KHÁC NGOÀI JSON:
+6. Tách dữ kiện quan sát được khỏi suy luận; nêu cả bằng chứng ủng hộ và rủi ro chính để AI thẩm định có thêm góc nhìn.
+7. Viết reasoning bằng Tiếng Việt súc tích, chuyên nghiệp theo phong cách Quantitative Trading.
+8. ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN với các trường sau, KHÔNG ĐƯỢC CÓ KÝ TỰ NÀO KHÁC NGOÀI JSON:
 {
   "market_state": "TRENDING" | "RANGING" | "VOLATILE" | "UNCERTAIN",
   "trend_strength": 75,
@@ -76,13 +77,18 @@ class GeminiMarketAnalyst:
         effective_system_prompt = GEMINI_SYSTEM_PROMPT
         if settings.SCALPING_MODE_ENABLED:
             effective_system_prompt += (
-                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI]\n"
-                f"- Hệ thống đang ưu tiên chốt lời nhanh (+{settings.TARGET_TAKE_PROFIT_PERCENT}%) để xoay vòng vốn liên tục.\n"
-                f"- Trong thị trường đi ngang (RANGING/SIDEWAY): Hãy CHỦ ĐỘNG đề xuất action: 'BUY' khi có tín hiệu nảy giá ngắn hạn (RSI/StochRSI nảy lên, chạm dải Bollinger dưới bật lên, hoặc volume gom hàng). KHÔNG cần chờ khung 1H phải uptrend mạnh.\n"
-                f"- Chỉ đề xuất 'HOLD' khi giá đang đu đỉnh sát dải trên Bollinger (%B > 0.85) hoặc cả hai khung thời gian đang cắm đầu rơi tự do.\n"
-                f"- Mục tiêu Take Profit: ~+{settings.TARGET_TAKE_PROFIT_PERCENT}% so với Entry Price.\n"
-                f"- Mức Stop Loss: ~-{settings.TARGET_STOP_LOSS_PERCENT}% so với Entry Price.\n"
-                f"- Tỷ lệ Risk:Reward tối thiểu từ 1.1:1 đến 1.5:1 là hoàn toàn hợp lệ."
+                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI ({settings.SCALPING_TIMEFRAME})]\n"
+                f"- Khung thời gian phân tích chính: nến {settings.SCALPING_TIMEFRAME}. Mục tiêu là chốt lãi nhanh từng nhịp sóng ngắn (0.6% - 1.5%) để tích lũy lợi nhuận bền vững.\n"
+                f"- CHIẾN THUẬT VÀO LỆNH (BUY):\n"
+                f"  1. Xu hướng thuận: Giá nằm trên EMA9/EMA21 trên nến {settings.SCALPING_TIMEFRAME}, MACD/Stoch hướng lên.\n"
+                f"  2. Săn nhịp hồi kỹ thuật (Mean Reversion / Oversold Bounce): Khi giá chạm dải dưới Bollinger Bands hoặc RSI/StochRSI ở vùng quá bán (< 30) và xuất hiện nến rút chân/đảo chiều tăng, ĐƯỢC PHÉP đề xuất BUY để ăn nhịp nảy ngắn hạn ngay cả khi khung 1H đang điều chỉnh hoặc đi ngang.\n"
+                f"- QUẢN TRỊ RỦI RO & PHÍ SÀN:\n"
+                f"  + Phí sàn Binance Spot là 0.20% (mua 0.1% + bán 0.1%). Mục tiêu Take Profit (TP) kỳ vọng phải đủ bù phí sàn (khuyến nghị TP từ 0.6% đến 1.5% tùy biên độ ATR/vùng cản gần).\n"
+                f"  + Cắt lỗ (Stop Loss) chặt chẽ, tối đa {settings.TARGET_STOP_LOSS_PERCENT}% so với giá vào (theo đáy nến gần nhất hoặc ATR).\n"
+                f"  + Đảm bảo tỷ lệ R:R ròng sau phí đạt tối thiểu {settings.SCALPING_MIN_NET_RISK_REWARD}:1.\n"
+                f"- CHỈ ĐỀ XUẤT 'HOLD' KHI:\n"
+                f"  + Giá đang rơi tự do cắm đầu mạnh và KHÔNG CÓ bất kỳ phản ứng rút chân hay phân kỳ hồi phục nào.\n"
+                f"  + Spread bị giãn mạnh (> 0.15%) hoặc thị trường hoàn toàn bất động không có thanh khoản."
             )
 
         data, latency_ms, usage = await self.gateway.complete_chat(

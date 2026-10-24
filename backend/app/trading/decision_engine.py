@@ -107,18 +107,22 @@ class DecisionEngine:
                     ltf_highs=highs,   ltf_lows=lows,   ltf_closes=closes,   ltf_volumes=volumes,
                     scalping_mode=settings.SCALPING_MODE_ENABLED
                 )
-                if settings.SCALPING_MODE_ENABLED and mtf_alignment.get("alignment") == "NEUTRAL":
+                if settings.SCALPING_MODE_ENABLED and mtf_alignment.get("alignment") in ("NEUTRAL", "COUNTER_TREND"):
                     reversal_confirmed = QuantEngine.has_confirmed_scalping_reversal(indicators, candles)
                     mtf_alignment["neutral_reversal_confirmed"] = reversal_confirmed
-                    mtf_alignment["allow_buy"] = reversal_confirmed
-                    mtf_alignment["bias"] = "BUY" if reversal_confirmed else "HOLD"
-                    mtf_alignment["note"] = (
-                        "MTF trung tính: đã xác nhận hồi sớm (giá lấy lại EMA9 hoặc bật lên từ Stoch quá bán), "
-                        "động lượng cải thiện và volume >= 0.7x."
-                        if reversal_confirmed else
-                        "MTF trung tính nhưng chưa xác nhận hồi: cần giá lấy lại EMA9 hoặc bật lên từ Stoch quá bán, "
-                        "động lượng cải thiện và volume >= 0.7x."
-                    )
+                    if reversal_confirmed:
+                        mtf_alignment["allow_buy"] = True
+                        mtf_alignment["bias"] = "BUY"
+                        mtf_alignment["note"] = (
+                            f"Scalping {timeframe}: Đã xác nhận nhịp nảy kỹ thuật / hồi sớm (giá lấy lại EMA9 hoặc bật lên từ Stoch/BB quá bán), "
+                            "cho phép mở vị thế lướt sóng ngắn chốt lời nhanh."
+                        )
+                    else:
+                        mtf_alignment["allow_buy"] = False
+                        mtf_alignment["bias"] = "HOLD"
+                        mtf_alignment["note"] = (
+                            f"Scalping {timeframe}: Đang chờ tín hiệu nảy kỹ thuật xác nhận (chạm cận dưới BB, Stoch/RSI quá bán hoặc nến đảo chiều)."
+                        )
                 pipeline_log["steps"]["mtf_alignment"] = {
                     "status": "PASS",
                     "alignment": mtf_alignment["alignment"],

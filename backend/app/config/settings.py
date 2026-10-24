@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL_ID: str = "gemini-3.8-flash"
     GPT_REASONING_LEVEL: str = "high"
     GEMINI_REASONING_LEVEL: str = "high"
-    AI_TIMEOUT_SECONDS: int = 60
+    AI_TIMEOUT_SECONDS: int = 90
     AI_MAX_RETRIES: int = 3
     AI_MAX_TOKENS: int = 2048
     MAX_AI_COST_PER_DAY: float = 5.0
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     SCALPING_COOLDOWN_MINUTES: int = 5           # Cooldown ngắn cho scalping (5 phút thay vì 20)
     SCALPING_MAX_DAILY_ENTRIES: int = 20         # Cho phép tối đa 20 lệnh/ngày khi scalping
     SCALPING_MIN_NET_RISK_REWARD: float = 1.1
-    SCALPING_TIMEFRAME: str = "1m"
+    SCALPING_TIMEFRAME: str = "5m"               # Khung 5m để biên độ nến đủ lớn (>0.8%) vượt phí sàn 0.20%
     SCALPING_EVALUATION_INTERVAL_SECONDS: int = 60
     SCALPING_POSITION_MONITOR_INTERVAL_SECONDS: int = 5
 

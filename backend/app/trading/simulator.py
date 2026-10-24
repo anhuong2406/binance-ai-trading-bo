@@ -62,6 +62,14 @@ class PaperSimulator:
 
         position = None
         if side.upper() == "BUY":
+            if settings.SCALPING_MODE_ENABLED:
+                # The decision engine passes levels anchored to the pre-fill quote;
+                # preserve their percentages after simulated slippage.
+                if take_profit is not None and stop_loss is not None and market_price > 0:
+                    target_tp_rate = (take_profit - market_price) / market_price
+                    target_sl_rate = (market_price - stop_loss) / market_price
+                    take_profit = fill_price * (Decimal("1") + target_tp_rate)
+                    stop_loss = fill_price * (Decimal("1") - target_sl_rate)
             position = await PositionManager.open_position(
                 session=session,
                 symbol=symbol,
@@ -71,6 +79,25 @@ class PaperSimulator:
                 take_profit=take_profit,
                 fee=fee,
                 mode="PAPER"
+            )
+        elif side.upper() == "SELL":
+            stmt = select(Position).where(
+                Position.symbol == symbol,
+                Position.mode == "PAPER",
+                Position.status == "OPEN"
+            ).order_by(Position.opened_at.desc())
+            result = await session.execute(stmt)
+            position = result.scalars().first()
+            if position is None:
+                raise ValueError(f"Không có vị thế Paper đang mở cho {symbol} để bán.")
+
+            await PositionManager.close_position(
+                session=session,
+                position_id=position.id,
+                exit_price=fill_price,
+                exit_fee=fee,
+                reason="AI_SELL_SIGNAL",
+                quantity=quantity
             )
 
         await session.commit()

@@ -11,6 +11,7 @@ from app.config.settings import settings
 from app.database.session import get_db, record_audit
 from app.database.models import Position, Order, DailyStat
 from app.trading.position_manager import PositionManager
+from app.trading.simulator import paper_simulator
 from app.scheduler.controller import trading_controller
 
 router = APIRouter(prefix="/api/trading", tags=["Trading"])
@@ -85,22 +86,71 @@ async def close_position_manually(position_id: int, db: AsyncSession = Depends(g
     if not pos or pos.status != "OPEN":
         raise HTTPException(status_code=404, detail="Vị thế không tồn tại hoặc đã đóng.")
 
-    # Get market price
-    try:
-        ticker = await trading_controller.binance_client.get_ticker_24hr(pos.symbol)
-        price = Decimal(ticker.get("lastPrice", str(pos.current_price)))
-    except Exception:
-        price = pos.current_price
+    if pos.mode == "PAPER":
+        try:
+            ticker = await trading_controller.binance_client.get_ticker_24hr(pos.symbol)
+            price = Decimal(ticker.get("lastPrice", str(pos.current_price)))
+        except Exception:
+            price = Decimal(pos.current_price)
 
-    exit_fee = pos.amount * price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+        result = await paper_simulator.execute_paper_order(
+            session=db,
+            symbol=pos.symbol,
+            side="SELL",
+            quantity=Decimal(pos.amount),
+            market_price=price
+        )
+        if result.get("status") != "FILLED":
+            raise HTTPException(status_code=502, detail="Không thể đóng vị thế Paper.")
+        price = Decimal(str(result["fill_price"]))
+        await db.refresh(pos)
+    elif pos.mode in ("LIVE", "TESTNET"):
+        try:
+            result = await trading_controller.decision_engine.execution.execute_spot_order(
+                symbol=pos.symbol,
+                side="SELL",
+                order_type="MARKET",
+                quantity=Decimal(pos.amount)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Binance chưa xác nhận lệnh SELL: {e}")
 
-    closed = await PositionManager.close_position(
-        session=db,
-        position_id=pos.id,
-        exit_price=price,
-        exit_fee=exit_fee,
-        reason="MANUAL_USER_CLOSE"
-    )
+        executed_qty = Decimal(str(result.get("executedQty", "0")))
+        quote_qty = Decimal(str(result.get("cummulativeQuoteQty", "0")))
+        client_order_id = str(result.get("clientOrderId") or f"BINANCE_{result.get('orderId', pos.id)}")
+        db.add(Order(
+            client_order_id=client_order_id,
+            exchange_order_id=str(result["orderId"]) if result.get("orderId") is not None else None,
+            symbol=pos.symbol,
+            side="SELL",
+            order_type="MARKET",
+            quantity=Decimal(pos.amount),
+            executed_qty=executed_qty,
+            cummulative_quote_qty=quote_qty,
+            status=str(result.get("status", "UNKNOWN")).upper(),
+            mode=pos.mode
+        ))
+        if executed_qty <= 0:
+            await db.commit()
+            raise HTTPException(status_code=502, detail="Lệnh SELL chưa khớp; vị thế vẫn được giữ để tiếp tục theo dõi.")
+
+        price = quote_qty / executed_qty if quote_qty > 0 else Decimal(pos.current_price)
+        quantity_to_close = min(executed_qty, Decimal(pos.amount))
+        quote_for_closed = quote_qty * quantity_to_close / executed_qty if quote_qty > 0 else price * quantity_to_close
+        exit_fee = quote_for_closed * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+        closed = await PositionManager.close_position(
+            session=db,
+            position_id=pos.id,
+            exit_price=price,
+            exit_fee=exit_fee,
+            reason="MANUAL_USER_CLOSE",
+            quantity=quantity_to_close
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Chế độ giao dịch không hợp lệ: {pos.mode}")
+
+    if pos.mode == "PAPER":
+        closed = pos
 
     await record_audit(
         db,
