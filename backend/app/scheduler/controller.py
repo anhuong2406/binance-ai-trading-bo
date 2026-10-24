@@ -332,18 +332,20 @@ class AutoTradingController:
                 except Exception:
                     pass
 
-            min_required_notional = 5.0
-            if avail_usdt < min_required_notional:
+            # Minimum Binance spot order: DOGEUSDT and SHIBUSDT only require 1.0 USDT!
+            # While BTC, ETH, and SOL require 5.0 USDT.
+            min_absolute_notional = 1.0
+            if avail_usdt < min_absolute_notional:
                 if open_count > 0:
                     self.standby_reason = (
-                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 5.0 USDT. "
-                        "Tạm dừng gọi AI để tiết kiệm 100% token, chờ bán xong vị thế hiện tại."
+                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 1.0 USDT. "
+                        "Tạm dừng quét AI để tiết kiệm 100% token, chờ bán xong vị thế hiện tại."
                     )
                     self.state = BotState.MONITORING_POSITION
                 else:
                     self.standby_reason = (
-                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) nhỏ hơn mức tối thiểu 5.0 USDT của sàn Binance. "
-                        "Tạm dừng gọi AI để tiết kiệm token."
+                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 1.0 USDT (không đủ mở bất kỳ lệnh nào trên sàn Binance). "
+                        "Tạm dừng quét AI để tiết kiệm token."
                     )
                     self.state = BotState.OBSERVING
                 await self.broadcast_status({"standby_reason": self.standby_reason})
@@ -362,6 +364,13 @@ class AutoTradingController:
             for pair in pair_manager.get_active_symbols():
                 if not self.is_running or settings.EMERGENCY_STOP_ACTIVE or (self.mode == "LIVE" and settings.LIVE_SPOT_LOCKED):
                     break
+
+                # Token optimization: if available balance is under 5.0 USDT,
+                # skip pairs requiring 5.0 USDT (BTC, ETH, SOL) to save AI tokens,
+                # and focus scanning strictly on 1-USDT pairs (DOGE, SHIB)!
+                if avail_usdt < 5.0 and pair not in ("DOGEUSDT", "SHIBUSDT"):
+                    continue
+
                 try:
                     result = await self.decision_engine.execute_cycle(
                         session=session,
