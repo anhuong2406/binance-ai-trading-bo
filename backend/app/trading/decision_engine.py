@@ -581,10 +581,24 @@ class DecisionEngine:
                 if settings.SCALPING_MODE_ENABLED and effective_sl_rate is not None and effective_tp_rate is not None:
                     tp_dec = fill_price * (Decimal("1") + Decimal(str(effective_tp_rate)))
                     sl_dec = fill_price * (Decimal("1") - Decimal(str(effective_sl_rate)))
+
+                # Deduct taker fee from base asset if trading in LIVE/TESTNET mode (0.1% fee)
+                net_amount = executed_qty
+                if mode in ("LIVE", "TESTNET"):
+                    base_asset = symbol[:-4] if symbol.endswith("USDT") else symbol
+                    try:
+                        free_bal = await self.account_manager.get_free_balance(base_asset)
+                        if free_bal > 0 and free_bal < executed_qty:
+                            net_amount = free_bal
+                        else:
+                            net_amount = executed_qty * Decimal("0.999")
+                    except Exception:
+                        net_amount = executed_qty * Decimal("0.999")
+
                 position = await PositionManager.open_position(
                     session=session,
                     symbol=symbol,
-                    amount=executed_qty,
+                    amount=net_amount,
                     entry_price=fill_price,
                     stop_loss=sl_dec,
                     take_profit=tp_dec,

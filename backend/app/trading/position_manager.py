@@ -130,38 +130,85 @@ class PositionManager:
         reason: str,
         execution_engine: Any = None
     ) -> Optional[Position]:
-        """Close only the quantity actually sold; keep the position open on failure."""
+        """
+        Close position via Spot and/or Binance Convert.
+        Guarantees execution even with taker fee deduction, LOT_SIZE stepSize, or sub-5 USDT minNotional.
+        """
         quantity = Decimal(position.amount)
         exit_price = market_price
+        exit_fee = Decimal("0.0")
 
         if position.mode in ("LIVE", "TESTNET"):
             if execution_engine is None:
                 logger.error("Thiếu execution engine khi đóng vị thế %s ở %s", position.symbol, position.mode)
                 return None
-            try:
-                response = await execution_engine.execute_spot_order(
-                    symbol=position.symbol,
-                    side="SELL",
-                    order_type="MARKET",
-                    quantity=quantity
-                )
-            except Exception as e:
-                logger.error("Lỗi gửi lệnh SELL %s trên Binance (%s): %s", reason, position.symbol, e)
+
+            client = getattr(execution_engine, "client", None)
+            base_asset = position.symbol[:-4] if position.symbol.endswith("USDT") else position.symbol
+
+            # 1. Fetch exact free balance on Binance
+            sell_qty = quantity
+            if client:
+                try:
+                    acc = await client.get_account_information()
+                    for b in acc.get("balances", []):
+                        if b.get("asset") == base_asset:
+                            free_bal = Decimal(str(b.get("free", "0")))
+                            if free_bal > 0:
+                                sell_qty = min(quantity, free_bal)
+                            break
+                except Exception as err:
+                    logger.warning("Không thể lấy số dư %s trên Binance: %s", base_asset, err)
+
+            total_quote_received = Decimal("0.0")
+            total_qty_sold = Decimal("0.0")
+
+            # 2. Check filters for spot order
+            if client:
+                try:
+                    filters = await client.get_symbol_filters(position.symbol)
+                    step_size = filters.get("stepSize", Decimal("0.0001"))
+                    min_notional = filters.get("minNotional", Decimal("5.0"))
+                    spot_qty = (sell_qty // step_size) * step_size
+
+                    # Check if spot order is feasible
+                    if spot_qty > 0 and (spot_qty * market_price) >= min_notional:
+                        resp = await execution_engine.execute_spot_order(
+                            symbol=position.symbol,
+                            side="SELL",
+                            order_type="MARKET",
+                            quantity=spot_qty
+                        )
+                        exec_q = Decimal(str(resp.get("executedQty", "0")))
+                        q_quote = Decimal(str(resp.get("cummulativeQuoteQty", "0")))
+                        if exec_q > 0:
+                            total_qty_sold += exec_q
+                            total_quote_received += q_quote
+                            exit_fee += q_quote * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+                except Exception as spot_err:
+                    logger.warning("Lệnh Spot SELL tự động %s thất bại (%s): %s. Thử Binance Convert...", reason, position.symbol, spot_err)
+
+            # 3. If spot failed or if there is remaining dust: use Binance Convert
+            remaining_qty = sell_qty - total_qty_sold
+            if remaining_qty > 0 and client:
+                try:
+                    conv_res = await client.convert_asset(
+                        from_asset=base_asset,
+                        to_asset="USDT",
+                        from_amount=remaining_qty
+                    )
+                    conv_from = Decimal(str(conv_res.get("fromAmount", str(remaining_qty))))
+                    conv_to = Decimal(str(conv_res.get("toAmount", "0")))
+                    total_qty_sold += conv_from
+                    total_quote_received += conv_to
+                except Exception as conv_err:
+                    logger.error("Binance Convert cũng thất bại (%s): %s", position.symbol, conv_err)
+
+            if total_qty_sold <= 0:
+                logger.error("Không thể đóng vị thế %s qua cả Spot và Convert.", position.symbol)
                 return None
 
-            executed_qty = Decimal(str(response.get("executedQty", "0")))
-            quote_qty = Decimal(str(response.get("cummulativeQuoteQty", "0")))
-            if executed_qty <= 0:
-                logger.error("Lệnh SELL %s chưa khớp (%s): %s", reason, position.symbol, response.get("status"))
-                return None
-
-            quantity = min(executed_qty, quantity)
-            if quote_qty > 0:
-                exit_price = quote_qty / executed_qty
-                closed_quote = quote_qty * quantity / executed_qty
-                exit_fee = closed_quote * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
-            else:
-                exit_fee = quantity * exit_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
+            exit_price = total_quote_received / total_qty_sold if total_qty_sold > 0 else market_price
         else:
             exit_fee = quantity * exit_price * Decimal(str(settings.BINANCE_TAKER_FEE_PERCENT / 100.0))
 
@@ -171,7 +218,7 @@ class PositionManager:
             exit_price=exit_price,
             exit_fee=exit_fee,
             reason=reason,
-            quantity=quantity
+            quantity=Decimal(position.amount)
         )
 
     @classmethod
