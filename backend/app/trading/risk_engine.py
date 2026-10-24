@@ -278,14 +278,15 @@ class RiskEngine:
                 reasons=[f"Đang có vị thế mở cho {symbol}. Không thực hiện mua thêm (Chống nhồi lệnh Martingale)."]
             )
 
-        # 7. Max daily entries check (Dynamic: 20 for Scalping, 5 for Standard)
+        # 7. Max daily entries check (0 or <= 0 means Unlimited)
         effective_max_entries = settings.SCALPING_MAX_DAILY_ENTRIES if settings.SCALPING_MODE_ENABLED else settings.MAX_DAILY_ENTRIES
-        today_entry_count = await self.get_today_entry_count(session, mode)
-        if today_entry_count >= effective_max_entries:
-            return RiskCheckResult(
-                passed=False,
-                reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({today_entry_count}/{effective_max_entries})."]
-            )
+        if effective_max_entries and effective_max_entries > 0:
+            today_entry_count = await self.get_today_entry_count(session, mode)
+            if today_entry_count >= effective_max_entries:
+                return RiskCheckResult(
+                    passed=False,
+                    reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({today_entry_count}/{effective_max_entries})."]
+                )
 
         # 8. Cooldown check (Dynamic: 5 mins for Scalping, 20 mins for Standard)
         effective_cooldown = settings.SCALPING_COOLDOWN_MINUTES if settings.SCALPING_MODE_ENABLED else settings.COOLDOWN_MINUTES

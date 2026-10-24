@@ -153,7 +153,7 @@ export const RiskControlPage: React.FC = () => {
           <div className="flex justify-between p-2 rounded bg-bg-card border border-bg-border">
             <span className="text-gray-400">Số lệnh đã mở hôm nay:</span>
             <span className="text-gray-100 font-bold">
-              {riskStatus?.today_trade_count || 0} / {riskStatus?.max_daily_entries || 5}
+              {riskStatus?.today_trade_count || 0} / {riskStatus?.max_daily_entries && riskStatus.max_daily_entries > 0 ? riskStatus.max_daily_entries : 'Không giới hạn (∞)'}
             </span>
           </div>
           <div className="flex justify-between p-2 rounded bg-bg-card border border-bg-border">
