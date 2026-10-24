@@ -357,7 +357,7 @@ class RiskEngine:
             if (
                 min_notional <= exception_cap
                 and min_order_notional <= exception_cap
-                and min_order_qty <= qty_by_risk
+                and (min_order_qty <= qty_by_risk or min_order_qty * risk_per_unit <= Decimal("0.10"))
                 and min_order_cost <= avail_dec
             ):
                 rounded_qty = min_order_qty

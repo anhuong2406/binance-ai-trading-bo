@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     TARGET_STOP_LOSS_PERCENT: float = 1.0        # Mặc định cắt lỗ -1.0% bảo vệ vốn chặt chẽ
     SCALPING_COOLDOWN_MINUTES: int = 5           # Cooldown ngắn cho scalping (5 phút thay vì 20)
     SCALPING_MAX_DAILY_ENTRIES: int = 20         # Cho phép tối đa 20 lệnh/ngày khi scalping
-    SCALPING_MIN_NET_RISK_REWARD: float = 1.1
+    SCALPING_MIN_NET_RISK_REWARD: float = 0.85
     SCALPING_TIMEFRAME: str = "5m"               # Khung 5m để biên độ nến đủ lớn (>0.8%) vượt phí sàn 0.20%
     SCALPING_EVALUATION_INTERVAL_SECONDS: int = 60
     SCALPING_POSITION_MONITOR_INTERVAL_SECONDS: int = 5
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
     MAX_RISK_PER_TRADE_PERCENT: float = 1.0     # 1% max risk per trade
     MAX_POSITION_SIZE_PERCENT: float = 25.0    # 25% max position value of bot capital
-    SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT: float = 5.0  # Exchange minimum exception, capped at 5 USDT
+    SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT: float = 6.0  # Exchange minimum exception, capped at 6 USDT to allow Binance minimum orders
     DAILY_MAX_LOSS_PERCENT: float = 2.0        # 2% max daily loss of start equity
     MAX_DRAWDOWN_PERCENT: float = 5.0          # 5% max drawdown from peak equity
     MAX_CONCURRENT_POSITIONS: int = 2          # Max 2 concurrent bot positions
