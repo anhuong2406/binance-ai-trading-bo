@@ -58,7 +58,8 @@ async def get_system_status():
         "timeframe": settings.SCALPING_TIMEFRAME if scalping else settings.DEFAULT_TIMEFRAME,
         "interval_seconds": settings.SCALPING_EVALUATION_INTERVAL_SECONDS if scalping else settings.EVALUATION_INTERVAL_SECONDS,
         "position_monitor_interval_seconds": settings.SCALPING_POSITION_MONITOR_INTERVAL_SECONDS if scalping else 15,
-        "ai_single_model_mode": settings.AI_SINGLE_MODEL_MODE
+        "ai_single_model_mode": settings.AI_SINGLE_MODEL_MODE,
+        "standby_reason": trading_controller.standby_reason
     }
 
 @router.post("/emergency-stop")

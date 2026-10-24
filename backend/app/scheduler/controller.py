@@ -6,7 +6,7 @@ import asyncio
 import time
 from typing import Dict, Any, Optional, List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.config.settings import settings
 from app.binance.client import BinanceSpotClient
 from app.trading.decision_engine import DecisionEngine
@@ -45,6 +45,7 @@ class AutoTradingController:
             use_testnet=(self.mode == "TESTNET")
         )
         self.decision_engine = DecisionEngine(self.binance_client)
+        self.standby_reason: Optional[str] = None
         self._ws_broadcast_callback = None
 
     def set_ws_broadcast(self, callback):
@@ -119,6 +120,7 @@ class AutoTradingController:
                 "is_running": self.is_running,
                 "emergency_stop": settings.EMERGENCY_STOP_ACTIVE,
                 "live_locked": settings.LIVE_SPOT_LOCKED,
+                "standby_reason": self.standby_reason,
                 "timestamp": int(time.time() * 1000)
             }
             if extra:
@@ -280,13 +282,14 @@ class AutoTradingController:
                     execution_engine=self.decision_engine.execution if self.mode in ("LIVE", "TESTNET") else None
                 )
                 if actions:
+                    self.standby_reason = None
                     for act in actions:
                         await notifier.notify(
                             "POSITION_CLOSED",
                             f"Đóng Vị Thế {act['symbol']}",
                             f"Lý do: {act['reason']} | PnL: {act['pnl']:.2f} USDT"
                         )
-                    await self.broadcast_status({"position_actions": actions})
+                    await self.broadcast_status({"position_actions": actions, "standby_reason": None})
             remaining_symbols = await self._get_open_position_symbols()
             if price_errors:
                 await self.broadcast_status({"position_price_errors": price_errors})
@@ -301,10 +304,56 @@ class AutoTradingController:
         if not self.is_running or settings.EMERGENCY_STOP_ACTIVE:
             return
 
-        self.state = BotState.ANALYZING
-        await self.broadcast_status()
-
         async with AsyncSessionLocal() as session:
+            # Check open positions count
+            stmt = select(func.count(Position.id)).where(
+                Position.status == "OPEN",
+                Position.mode == self.mode
+            )
+            count_res = await session.execute(stmt)
+            open_count = count_res.scalar() or 0
+
+            # 1. Max concurrent positions reached
+            if open_count >= settings.MAX_CONCURRENT_POSITIONS:
+                self.standby_reason = (
+                    f"Đang nắm giữ {open_count}/{settings.MAX_CONCURRENT_POSITIONS} vị thế. "
+                    "Tạm dừng quét AI để tiết kiệm 100% token, tập trung theo dõi chốt lời/cắt lỗ."
+                )
+                self.state = BotState.MONITORING_POSITION
+                await self.broadcast_status({"standby_reason": self.standby_reason})
+                return
+
+            # 2. Check available buying power
+            avail_usdt = settings.BOT_ALLOCATED_CAPITAL_USDT
+            if self.mode in ("TESTNET", "LIVE"):
+                try:
+                    acc_info = await self.decision_engine.account_manager.get_spot_balances()
+                    avail_usdt = float(acc_info.get("usdtFree", 0.0))
+                except Exception:
+                    pass
+
+            min_required_notional = 5.0
+            if avail_usdt < min_required_notional:
+                if open_count > 0:
+                    self.standby_reason = (
+                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 5.0 USDT. "
+                        "Tạm dừng gọi AI để tiết kiệm 100% token, chờ bán xong vị thế hiện tại."
+                    )
+                    self.state = BotState.MONITORING_POSITION
+                else:
+                    self.standby_reason = (
+                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) nhỏ hơn mức tối thiểu 5.0 USDT của sàn Binance. "
+                        "Tạm dừng gọi AI để tiết kiệm token."
+                    )
+                    self.state = BotState.OBSERVING
+                await self.broadcast_status({"standby_reason": self.standby_reason})
+                return
+
+            # Buying power is available: clear standby and proceed with AI analysis
+            self.standby_reason = None
+            self.state = BotState.ANALYZING
+            await self.broadcast_status({"standby_reason": None})
+
             timeframe = (
                 settings.SCALPING_TIMEFRAME
                 if settings.SCALPING_MODE_ENABLED

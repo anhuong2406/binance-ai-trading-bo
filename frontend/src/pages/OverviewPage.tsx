@@ -42,6 +42,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Standby Token-Saving Notice */}
+      {status?.standby_reason && (
+        <div className="bg-amber-950/40 border border-amber-500/40 rounded-lg p-3 flex items-center gap-2.5 text-xs font-mono text-amber-200 shadow-sm">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+          <span>{status.standby_reason}</span>
+        </div>
+      )}
+
       {/* Top Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Total Spot Value */}

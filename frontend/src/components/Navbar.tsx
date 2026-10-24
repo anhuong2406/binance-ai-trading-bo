@@ -46,6 +46,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'text-bloomberg-cyan border-bloomberg-cyan/30 bg-bloomberg-cyan/10 animate-pulse';
       case 'EXECUTING':
         return 'text-bloomberg-orange border-bloomberg-orange/30 bg-bloomberg-orange/10';
+      case 'MONITORING_POSITION':
+        return 'text-amber-400 border-amber-400/40 bg-amber-400/10 font-bold';
       case 'EMERGENCY_STOP':
         return 'text-bloomberg-red border-bloomberg-red/40 bg-bloomberg-red/20 font-bold';
       default:
@@ -126,12 +128,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Bot State Badge */}
       <div className="flex items-center space-x-2">
         <div
+          title={status?.standby_reason || undefined}
           className={`px-3 py-1 rounded-md text-xs font-mono border flex items-center gap-1.5 ${getStatusColor(
             botState
           )}`}
         >
           <Activity className="w-3.5 h-3.5" />
-          <span>{botState}</span>
+          <span>{botState === 'MONITORING_POSITION' ? 'CHỜ BÁN (TIẾT KIỆM TOKEN)' : botState}</span>
         </div>
 
         {/* Start / Stop Controller */}
