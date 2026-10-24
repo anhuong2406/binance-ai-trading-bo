@@ -83,7 +83,7 @@ class GeminiMarketAnalyst:
                 f"  1. Xu hướng thuận: Giá nằm trên EMA9/EMA21 trên nến {settings.SCALPING_TIMEFRAME}, MACD/Stoch hướng lên.\n"
                 f"  2. Săn nhịp hồi kỹ thuật (Mean Reversion / Oversold Bounce): Khi giá chạm dải dưới Bollinger Bands hoặc RSI/StochRSI ở vùng quá bán (< 30) và xuất hiện nến rút chân/đảo chiều tăng, ĐƯỢC PHÉP đề xuất BUY để ăn nhịp nảy ngắn hạn ngay cả khi khung 1H đang điều chỉnh hoặc đi ngang.\n"
                 f"- QUẢN TRỊ RỦI RO & PHÍ SÀN:\n"
-                f"  + Phí sàn Binance Spot là 0.20% (mua 0.1% + bán 0.1%). Mục tiêu Take Profit (TP) kỳ vọng phải đủ bù phí sàn (khuyến nghị TP từ 0.6% đến 1.5% tùy biên độ ATR/vùng cản gần).\n"
+                f"  + Phí sàn Binance Spot là 0.20% (mua 0.1% + bán 0.1%). Khuyến nghị đặt mục tiêu Take Profit (TP) từ 1.0% đến 1.8% (hoặc theo kháng cự gần nhất) để tối ưu lợi nhuận ròng sau phí.\n"
                 f"  + Cắt lỗ (Stop Loss) chặt chẽ, tối đa {settings.TARGET_STOP_LOSS_PERCENT}% so với giá vào (theo đáy nến gần nhất hoặc ATR).\n"
                 f"  + Đảm bảo tỷ lệ R:R ròng sau phí đạt tối thiểu {settings.SCALPING_MIN_NET_RISK_REWARD}:1.\n"
                 f"- CHỈ ĐỀ XUẤT 'HOLD' KHI:\n"

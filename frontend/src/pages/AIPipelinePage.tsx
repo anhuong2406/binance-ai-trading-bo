@@ -42,6 +42,7 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
   useEffect(() => {
     if (lastReport) {
       setCurrentReport(lastReport);
+      loadLogs();
     }
   }, [lastReport]);
 
@@ -59,6 +60,8 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
 
   useEffect(() => {
     loadLogs();
+    const interval = setInterval(loadLogs, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAnalyzeNow = async () => {
