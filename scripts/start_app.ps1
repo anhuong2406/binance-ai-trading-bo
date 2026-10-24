@@ -23,8 +23,9 @@ if ($portOccupied) {
     Start-Sleep -Milliseconds 800
 }
 
-# Khởi động Backend + Static Frontend trên port 8000
+# Khởi động Backend + Static Frontend trên port 8000 (0.0.0.0 để điện thoại cùng Wi-Fi truy cập được)
 Write-Host "[INFO] Đang khởi động máy chủ tại http://127.0.0.1:8000 ..." -ForegroundColor Green
+Write-Host "[INFO] Điện thoại cùng Wi-Fi truy cập tại: http://192.168.0.100:8000" -ForegroundColor Cyan
 Write-Host "[INFO] Nhấn Ctrl+C để dừng hệ thống." -ForegroundColor Gray
 Write-Host ""
 
@@ -35,4 +36,4 @@ Start-Job -ScriptBlock {
 } | Out-Null
 
 Set-Location backend
-& "..\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+& "..\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
