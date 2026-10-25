@@ -7,7 +7,8 @@ import {
   AIAnalysisLog,
   RiskStatus,
   BacktestReport,
-  TradingMode
+  TradingMode,
+  MarketRadarData
 } from '../types';
 
 const BASE_URL = '/api';
@@ -294,6 +295,19 @@ export const api = {
   async syncTradeMemories(): Promise<{ status: string; synced_count: number; message: string }> {
     const res = await fetch(`${BASE_URL}/trading/memories/sync`, { method: "POST" });
     if (!res.ok) throw new Error("Không thể đồng bộ kinh nghiệm giao dịch");
+    return res.json();
+  },
+
+  async getMarketRadar(forceRefresh = false): Promise<MarketRadarData> {
+    const q = forceRefresh ? '?force_refresh=true' : '';
+    const res = await fetch(`${BASE_URL}/trading/screener${q}`);
+    if (!res.ok) throw new Error('Không thể tải dữ liệu Radar Thị Trường');
+    return res.json();
+  },
+
+  async triggerMarketScan(): Promise<MarketRadarData> {
+    const res = await fetch(`${BASE_URL}/trading/screener/scan`, { method: 'POST' });
+    if (!res.ok) throw new Error('Lỗi quét thị trường trực tiếp');
     return res.json();
   },
 

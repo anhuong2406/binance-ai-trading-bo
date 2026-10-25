@@ -161,3 +161,39 @@ export interface TradeMemoryRecord {
   recommendation: string;
   created_at?: string;
 }
+
+export interface MarketCandidate {
+  symbol: string;
+  price: number;
+  price_change_24h: number;
+  quote_volume_m: number;
+  atr_percent: number;
+  rsi14: number;
+  ema_trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  score: number;
+  score_breakdown: {
+    momentum: number;
+    volatility: number;
+    rsi: number;
+    liquidity: number;
+    trade_memory: number;
+  };
+  reason: string;
+  rank: number;
+  is_best_pick: boolean;
+  historical_win_rate: number;
+  historical_trades: number;
+  is_watched: boolean;
+}
+
+export interface MarketRadarData {
+  status: string;
+  timestamp: number;
+  scan_duration_ms: number;
+  capital_usdt: number;
+  min_notional_eligible: number;
+  total_screened_universe: number;
+  stage1_passed_count: number;
+  best_pick: MarketCandidate | null;
+  candidates: MarketCandidate[];
+}

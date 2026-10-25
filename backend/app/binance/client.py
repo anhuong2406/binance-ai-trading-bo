@@ -199,9 +199,10 @@ class BinanceSpotClient:
         params = {"symbol": symbol, "interval": interval, "limit": limit}
         return await self._request("GET", "/api/v3/klines", params=params)
 
-    async def get_ticker_24hr(self, symbol: str) -> Dict[str, Any]:
-        """Fetch 24hr ticker price change statistics."""
-        return await self._request("GET", "/api/v3/ticker/24hr", params={"symbol": symbol})
+    async def get_ticker_24hr(self, symbol: Optional[str] = None) -> Any:
+        """Fetch 24hr ticker price change statistics for a symbol or all symbols."""
+        params = {"symbol": symbol} if symbol else {}
+        return await self._request("GET", "/api/v3/ticker/24hr", params=params)
 
     async def get_order_book(self, symbol: str, limit: int = 10) -> Dict[str, Any]:
         """Fetch current order book depth."""

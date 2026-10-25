@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { SpotAccount, Position, SystemStatus } from '../types';
 import { TradeMemoryHub } from '../components/TradeMemoryHub';
+import { MarketRadarHub } from '../components/MarketRadarHub';
 
 interface OverviewPageProps {
   status: SystemStatus | null;
@@ -222,6 +223,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Market Radar & Top-Down Best Pick Selection Hub */}
+      <MarketRadarHub />
 
       {/* AI Trade Memory & Lessons Learned Hub */}
       <TradeMemoryHub />

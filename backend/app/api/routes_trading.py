@@ -308,3 +308,53 @@ async def sync_historical_trade_memories(db: AsyncSession = Depends(get_db)):
         "synced_count": count,
         "message": f"Đã đồng bộ {count} bài học kinh nghiệm từ lịch sử giao dịch."
     }
+
+@router.get("/screener")
+async def get_market_screener(
+    force_refresh: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns 2-stage market screening results and the #1 Best Pick suitable for available capital.
+    """
+    try:
+        from app.trading.market_screener import market_screener
+        capital = float(settings.BOT_ALLOCATED_CAPITAL_USDT)
+        if trading_controller.mode in ("TESTNET", "LIVE"):
+            try:
+                acc = await trading_controller.decision_engine.account_manager.get_spot_balances()
+                capital = float(acc.get("usdtFree", capital))
+            except Exception:
+                pass
+        res = await market_screener.scan_market(
+            capital_usdt=capital,
+            session=db,
+            force_refresh=force_refresh
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/screener/scan")
+async def trigger_market_scan(db: AsyncSession = Depends(get_db)):
+    """
+    Forces an immediate fresh market screening cycle and returns ranked candidates.
+    """
+    try:
+        from app.trading.market_screener import market_screener
+        capital = float(settings.BOT_ALLOCATED_CAPITAL_USDT)
+        if trading_controller.mode in ("TESTNET", "LIVE"):
+            try:
+                acc = await trading_controller.decision_engine.account_manager.get_spot_balances()
+                capital = float(acc.get("usdtFree", capital))
+            except Exception:
+                pass
+        res = await market_screener.scan_market(
+            capital_usdt=capital,
+            session=db,
+            force_refresh=True
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

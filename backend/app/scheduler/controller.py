@@ -356,12 +356,35 @@ class AutoTradingController:
             self.state = BotState.ANALYZING
             await self.broadcast_status({"standby_reason": None})
 
+            # 3. Market Screener & Best Pick Identification (Top-down Capital Allocation)
+            symbols_to_evaluate = []
+            try:
+                from app.trading.market_screener import market_screener
+                screener_result = await market_screener.scan_market(
+                    capital_usdt=avail_usdt,
+                    session=session,
+                    force_refresh=False
+                )
+                await self.broadcast_status({"market_radar": screener_result})
+                # Prioritize Top candidates from Screener (#1 Best Pick first)
+                radar_symbols = [c["symbol"] for c in screener_result.get("candidates", [])]
+                for s in radar_symbols:
+                    if s not in symbols_to_evaluate:
+                        symbols_to_evaluate.append(s)
+            except Exception as e:
+                pass
+
+            # Also ensure active watched symbols from pair_manager are evaluated
+            for s in pair_manager.get_active_symbols():
+                if s not in symbols_to_evaluate:
+                    symbols_to_evaluate.append(s)
+
             timeframe = (
                 settings.SCALPING_TIMEFRAME
                 if settings.SCALPING_MODE_ENABLED
                 else settings.DEFAULT_TIMEFRAME
             )
-            for pair in pair_manager.get_active_symbols():
+            for pair in symbols_to_evaluate:
                 if not self.is_running or settings.EMERGENCY_STOP_ACTIVE or (self.mode == "LIVE" and settings.LIVE_SPOT_LOCKED):
                     break
 
@@ -370,6 +393,15 @@ class AutoTradingController:
                 # and focus scanning strictly on 1-USDT pairs (DOGE, SHIB)!
                 if avail_usdt < 5.0 and pair not in ("DOGEUSDT", "SHIBUSDT"):
                     continue
+
+                # If capital was consumed by an earlier execution in this cycle, stop opening new positions
+                if self.mode in ("TESTNET", "LIVE"):
+                    try:
+                        acc_check = await self.decision_engine.account_manager.get_spot_balances()
+                        if float(acc_check.get("usdtFree", 0.0)) < 1.0:
+                            break
+                    except Exception:
+                        pass
 
                 try:
                     result = await self.decision_engine.execute_cycle(
