@@ -313,8 +313,8 @@ class AutoTradingController:
             count_res = await session.execute(stmt)
             open_count = count_res.scalar() or 0
 
-            # 1. Max concurrent positions reached
-            if open_count >= settings.MAX_CONCURRENT_POSITIONS:
+            # 1. Max concurrent positions reached (only when > 0, 0 = Unlimited)
+            if settings.MAX_CONCURRENT_POSITIONS and settings.MAX_CONCURRENT_POSITIONS > 0 and open_count >= settings.MAX_CONCURRENT_POSITIONS:
                 self.standby_reason = (
                     f"Đang nắm giữ {open_count}/{settings.MAX_CONCURRENT_POSITIONS} vị thế. "
                     "Tạm dừng quét AI để tiết kiệm 100% token, tập trung theo dõi chốt lời/cắt lỗ."

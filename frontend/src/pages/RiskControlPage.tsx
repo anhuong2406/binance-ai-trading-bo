@@ -157,6 +157,12 @@ export const RiskControlPage: React.FC = () => {
             </span>
           </div>
           <div className="flex justify-between p-2 rounded bg-bg-card border border-bg-border">
+            <span className="text-gray-400">Số vị thế mở đồng thời tối đa:</span>
+            <span className="text-gray-100 font-bold">
+              {riskStatus?.max_concurrent_positions && riskStatus.max_concurrent_positions > 0 ? riskStatus.max_concurrent_positions : 'Không giới hạn (∞)'}
+            </span>
+          </div>
+          <div className="flex justify-between p-2 rounded bg-bg-card border border-bg-border">
             <span className="text-gray-400">Thời gian nghỉ Cooldown:</span>
             <span className="text-gray-100 font-bold">
               {riskStatus?.cooldown_minutes ? `${riskStatus.cooldown_minutes} phút` : 'Đã tắt (0 phút)'}
@@ -193,12 +199,12 @@ export const RiskControlPage: React.FC = () => {
               type="number"
               step="1"
               min="5"
-              max="50"
+              max="100"
               value={maxPos}
               onChange={(e) => setMaxPos(parseFloat(e.target.value) || 5)}
               className="w-full bg-bg-darkest border border-bg-border rounded px-3 py-1.5 text-gray-100 focus:outline-none focus:border-bloomberg-cyan"
             />
-            <span className="text-[10px] text-gray-500">Mặc định: 25.0% vốn bot</span>
+            <span className="text-[10px] text-gray-500">Mặc định: 100.0% vốn bot</span>
           </div>
 
           <div>

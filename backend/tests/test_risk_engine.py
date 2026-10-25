@@ -51,14 +51,16 @@ async def test_case_7_insufficient_available_balance(test_db, mock_symbol_filter
 
 @pytest.mark.asyncio
 async def test_case_8_max_concurrent_positions(test_db, mock_symbol_filters):
-    """Case 8: Rejects opening new position when max concurrent positions (2) is reached."""
+    """Case 8: Rejects opening new position when max concurrent positions is reached, and allows when 0 (unlimited)."""
     # Add 2 open positions
     p1 = Position(symbol="ETHUSDT", amount=Decimal("0.1"), entry_price=Decimal("3000"), current_price=Decimal("3000"), status="OPEN", mode="PAPER")
     p2 = Position(symbol="SOLUSDT", amount=Decimal("1.0"), entry_price=Decimal("150"), current_price=Decimal("150"), status="OPEN", mode="PAPER")
     test_db.add_all([p1, p2])
     await test_db.commit()
 
-    res = await risk_engine.evaluate_trade(
+    # Part 1: Unlimited mode (MAX_CONCURRENT_POSITIONS = 0) -> does not block for position count
+    settings.MAX_CONCURRENT_POSITIONS = 0
+    res_unlimited = await risk_engine.evaluate_trade(
         session=test_db,
         symbol="BTCUSDT",
         action="BUY",
@@ -70,8 +72,27 @@ async def test_case_8_max_concurrent_positions(test_db, mock_symbol_filters):
         symbol_filters=mock_symbol_filters,
         mode="PAPER"
     )
-    assert res.passed is False
-    assert any("tối đa cho bot" in r for r in res.reasons)
+    assert not any("tối đa cho bot" in r for r in res_unlimited.reasons)
+
+    # Part 2: Limited mode (MAX_CONCURRENT_POSITIONS = 2) -> rejects
+    settings.MAX_CONCURRENT_POSITIONS = 2
+    try:
+        res = await risk_engine.evaluate_trade(
+            session=test_db,
+            symbol="BTCUSDT",
+            action="BUY",
+            entry_price=65000.0,
+            stop_loss=64500.0,
+            take_profit=66500.0,
+            allocated_capital=100.0,
+            available_usdt=100.0,
+            symbol_filters=mock_symbol_filters,
+            mode="PAPER"
+        )
+        assert res.passed is False
+        assert any("tối đa cho bot" in r for r in res.reasons)
+    finally:
+        settings.MAX_CONCURRENT_POSITIONS = 0
 
 @pytest.mark.asyncio
 async def test_case_8_no_martingale_adding(test_db, mock_symbol_filters):

@@ -252,18 +252,19 @@ class RiskEngine:
                 reasons=[f"Đã chạm ngưỡng Drawdown tối đa ({current_dd_pct:.2f}% >= {settings.MAX_DRAWDOWN_PERCENT}%). Khóa giao dịch bảo vệ tài sản!"]
             )
 
-        # 6. Max concurrent positions check (Max 2)
-        pos_stmt = select(func.count(Position.id)).where(
-            Position.status == "OPEN",
-            Position.mode == mode
-        )
-        pos_res = await session.execute(pos_stmt)
-        open_positions_count = pos_res.scalar() or 0
-        if open_positions_count >= settings.MAX_CONCURRENT_POSITIONS:
-            return RiskCheckResult(
-                passed=False,
-                reasons=[f"Đã đạt số lượng vị thế mở tối đa cho bot ({open_positions_count}/{settings.MAX_CONCURRENT_POSITIONS})."]
+        # 6. Max concurrent positions check (0 or <= 0 means Unlimited)
+        if settings.MAX_CONCURRENT_POSITIONS and settings.MAX_CONCURRENT_POSITIONS > 0:
+            pos_stmt = select(func.count(Position.id)).where(
+                Position.status == "OPEN",
+                Position.mode == mode
             )
+            pos_res = await session.execute(pos_stmt)
+            open_positions_count = pos_res.scalar() or 0
+            if open_positions_count >= settings.MAX_CONCURRENT_POSITIONS:
+                return RiskCheckResult(
+                    passed=False,
+                    reasons=[f"Đã đạt số lượng vị thế mở tối đa cho bot ({open_positions_count}/{settings.MAX_CONCURRENT_POSITIONS})."]
+                )
 
         # Check if already holding this symbol
         sym_stmt = select(func.count(Position.id)).where(

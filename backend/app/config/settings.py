@@ -76,11 +76,11 @@ class Settings(BaseSettings):
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
     MAX_RISK_PER_TRADE_PERCENT: float = 1.0     # 1% max risk per trade
-    MAX_POSITION_SIZE_PERCENT: float = 25.0    # 25% max position value of bot capital
+    MAX_POSITION_SIZE_PERCENT: float = 25.0    # 25% max position value of bot capital (hỗ trợ nâng lên tới 100% trong cài đặt)
     SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT: float = 6.0  # Exchange minimum exception, capped at 6 USDT to allow Binance minimum orders
     DAILY_MAX_LOSS_PERCENT: float = 2.0        # 2% max daily loss of start equity
     MAX_DRAWDOWN_PERCENT: float = 5.0          # 5% max drawdown from peak equity
-    MAX_CONCURRENT_POSITIONS: int = 2          # Max 2 concurrent bot positions
+    MAX_CONCURRENT_POSITIONS: int = 0          # 0 = Không giới hạn số vị thế đồng thời (Unlimited)
     MAX_DAILY_ENTRIES: int = 0                 # 0 = Không giới hạn số lệnh/ngày (Unlimited)
     COOLDOWN_MINUTES: int = 0                  # 0 = Bỏ thời gian nghỉ Cooldown (Vào lệnh ngay sau khi đóng)
     SLIPPAGE_ESTIMATE_PERCENT: float = 0.05    # 0.05% slippage simulation

@@ -70,8 +70,8 @@ async def update_risk_config(req: RiskConfigUpdate, db: AsyncSession = Depends(g
         settings.MAX_RISK_PER_TRADE_PERCENT = req.max_risk_per_trade_percent
 
     if req.max_position_size_percent is not None:
-        if req.max_position_size_percent > 50.0:
-            raise HTTPException(status_code=400, detail="Quy mô vị thế không được vượt quá 50% vốn bot.")
+        if req.max_position_size_percent > 100.0:
+            raise HTTPException(status_code=400, detail="Quy mô vị thế không được vượt quá 100% vốn bot.")
         settings.MAX_POSITION_SIZE_PERCENT = req.max_position_size_percent
 
     if req.daily_max_loss_percent is not None:
@@ -85,8 +85,6 @@ async def update_risk_config(req: RiskConfigUpdate, db: AsyncSession = Depends(g
         settings.MAX_DRAWDOWN_PERCENT = req.max_drawdown_percent
 
     if req.max_concurrent_positions is not None:
-        if req.max_concurrent_positions > 5:
-            raise HTTPException(status_code=400, detail="Tối đa 5 vị thế đồng thời.")
         settings.MAX_CONCURRENT_POSITIONS = req.max_concurrent_positions
 
     if req.max_daily_entries is not None:
