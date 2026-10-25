@@ -25,6 +25,7 @@ from app.database.models import AIAnalysisLog, RiskEvaluation, Position, Order
 from app.database.session import record_audit
 from app.config.settings import settings
 from app.skills import skill_selector, skill_audit
+from app.trading.trade_memory import TradeMemoryService
 
 # HTF (Higher Timeframe) for multi-timeframe confirmation
 HTF_TIMEFRAME = "1h"
@@ -204,6 +205,23 @@ class DecisionEngine:
         gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
         gpt_skills_prompt = skill_selector.get_gpt_skills_prompt(quant_skills)
         skill_audit.set_last_cycle_skills(list(quant_skills.keys()))
+
+        # Trade Memory & Lessons Learned Injection
+        trade_lessons_prompt = ""
+        try:
+            trade_lessons_prompt = await TradeMemoryService.format_lessons_for_ai_prompt(
+                session=session, symbol=symbol, mode=mode
+            )
+        except Exception:
+            pass
+
+        if trade_lessons_prompt:
+            gemini_skills_prompt = f"{gemini_skills_prompt}\n\n{trade_lessons_prompt}" if gemini_skills_prompt else trade_lessons_prompt
+            gpt_skills_prompt = f"{gpt_skills_prompt}\n\n{trade_lessons_prompt}" if gpt_skills_prompt else trade_lessons_prompt
+            pipeline_log["steps"]["trade_memory"] = {
+                "status": "APPLIED",
+                "lessons_injected": True
+            }
 
         pipeline_log["steps"]["trading_skills"] = {
             "status": "PASS",

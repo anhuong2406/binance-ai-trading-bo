@@ -277,6 +277,26 @@ export const api = {
     return res.json();
   },
 
+  async getTradeMemories(symbol?: string, limit: number = 20): Promise<{
+    status: string;
+    total_memories: number;
+    win_count: number;
+    loss_count: number;
+    win_rate: number;
+    memories: any[];
+  }> {
+    const q = symbol ? `?symbol=${symbol}&limit=${limit}` : `?limit=${limit}`;
+    const res = await fetch(`${BASE_URL}/trading/memories${q}`);
+    if (!res.ok) throw new Error("Không thể tải nhật ký kinh nghiệm giao dịch");
+    return res.json();
+  },
+
+  async syncTradeMemories(): Promise<{ status: string; synced_count: number; message: string }> {
+    const res = await fetch(`${BASE_URL}/trading/memories/sync`, { method: "POST" });
+    if (!res.ok) throw new Error("Không thể đồng bộ kinh nghiệm giao dịch");
+    return res.json();
+  },
+
   async addPair(symbol: string, name?: string): Promise<any> {
     const res = await fetch(`${BASE_URL}/pairs/add`, {
       method: 'POST',

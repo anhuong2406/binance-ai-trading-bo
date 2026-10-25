@@ -134,3 +134,30 @@ class AuditEvent(Base):
     message = Column(Text, nullable=False)
     details_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utc_now, index=True)
+
+class TradeMemory(Base):
+    """
+    Trade Memory & Lessons Learned Database
+    Stores every closed trade's outcome, context, lessons learned, and recommendations.
+    Fed directly into future AI analysis prompts so the bot learns from past wins/losses.
+    """
+    __tablename__ = "trade_memories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), nullable=True, index=True)
+    symbol = Column(String(20), index=True, nullable=False)
+    side = Column(String(10), default="BUY")
+    mode = Column(String(20), default="LIVE", index=True)  # LIVE, PAPER, TESTNET
+    outcome = Column(String(10), nullable=False, index=True)  # WIN, LOSS, BREAKEVEN
+    entry_price = Column(Numeric(18, 8), nullable=False)
+    exit_price = Column(Numeric(18, 8), nullable=False)
+    pnl_usd = Column(Numeric(18, 8), nullable=False)
+    pnl_percent = Column(Float, nullable=False)
+    hold_duration_minutes = Column(Integer, default=0)
+    close_reason = Column(String(100), nullable=True)
+    strategy_tag = Column(String(50), default="scalping-bounce")
+    market_state = Column(String(50), nullable=True)
+    lesson_learned = Column(Text, nullable=False)
+    recommendation = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
+

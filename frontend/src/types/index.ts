@@ -142,3 +142,22 @@ export interface BacktestReport {
     reason: string;
   }[];
 }
+
+export interface TradeMemoryRecord {
+  id: number;
+  position_id?: number;
+  symbol: string;
+  mode: string;
+  outcome: 'WIN' | 'LOSS' | 'BREAKEVEN';
+  entry_price: number;
+  exit_price: number;
+  pnl_usd: number;
+  pnl_percent: number;
+  hold_duration_minutes: number;
+  close_reason: string;
+  strategy_tag: string;
+  market_state?: string;
+  lesson_learned: string;
+  recommendation: string;
+  created_at?: string;
+}

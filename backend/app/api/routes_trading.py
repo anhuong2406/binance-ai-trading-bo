@@ -11,6 +11,7 @@ from app.config.settings import settings
 from app.database.session import get_db, record_audit
 from app.database.models import Position, Order, DailyStat
 from app.trading.position_manager import PositionManager
+from app.trading.trade_memory import TradeMemoryService
 from app.trading.simulator import paper_simulator
 from app.scheduler.controller import trading_controller
 
@@ -244,4 +245,66 @@ async def get_trading_stats(db: AsyncSession = Depends(get_db)):
             }
             for d in daily_stats
         ]
+    }
+
+
+@router.get("/memories")
+async def get_trade_memories(
+    symbol: Optional[str] = Query(default=None),
+    limit: int = Query(default=20),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch structured trade memory and lessons learned for AI adaptive learning.
+    """
+    memories = await TradeMemoryService.get_recent_memories(
+        session=db,
+        symbol=symbol,
+        mode=trading_controller.mode,
+        limit=limit
+    )
+    win_count = sum(1 for m in memories if m.outcome == "WIN")
+    loss_count = sum(1 for m in memories if m.outcome == "LOSS")
+    total = len(memories)
+    win_rate = (win_count / total * 100) if total > 0 else 0.0
+
+    return {
+        "status": "SUCCESS",
+        "total_memories": total,
+        "win_count": win_count,
+        "loss_count": loss_count,
+        "win_rate": round(win_rate, 2),
+        "memories": [
+            {
+                "id": m.id,
+                "position_id": m.position_id,
+                "symbol": m.symbol,
+                "mode": m.mode,
+                "outcome": m.outcome,
+                "entry_price": float(m.entry_price),
+                "exit_price": float(m.exit_price),
+                "pnl_usd": float(m.pnl_usd),
+                "pnl_percent": round(m.pnl_percent, 2),
+                "hold_duration_minutes": m.hold_duration_minutes,
+                "close_reason": m.close_reason,
+                "strategy_tag": m.strategy_tag,
+                "market_state": m.market_state,
+                "lesson_learned": m.lesson_learned,
+                "recommendation": m.recommendation,
+                "created_at": m.created_at.isoformat() if m.created_at else None
+            }
+            for m in memories
+        ]
+    }
+
+@router.post("/memories/sync")
+async def sync_historical_trade_memories(db: AsyncSession = Depends(get_db)):
+    """
+    Backfills trade memory records for any existing closed positions.
+    """
+    count = await TradeMemoryService.seed_historical_positions(db)
+    return {
+        "status": "SUCCESS",
+        "synced_count": count,
+        "message": f"Đã đồng bộ {count} bài học kinh nghiệm từ lịch sử giao dịch."
     }

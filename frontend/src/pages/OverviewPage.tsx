@@ -13,6 +13,7 @@ import {
   Coins
 } from 'lucide-react';
 import { SpotAccount, Position, SystemStatus } from '../types';
+import { TradeMemoryHub } from '../components/TradeMemoryHub';
 
 interface OverviewPageProps {
   status: SystemStatus | null;
@@ -221,6 +222,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AI Trade Memory & Lessons Learned Hub */}
+      <TradeMemoryHub />
     </div>
   );
 };

@@ -48,6 +48,7 @@ class PositionManager:
         session.add(pos)
         await session.commit()
         await session.refresh(pos)
+
         return pos
 
     @classmethod
@@ -119,6 +120,20 @@ class PositionManager:
 
         await session.commit()
         await session.refresh(pos)
+
+        # Record trade experience and actionable lessons learned for AI
+        if fully_closed:
+            try:
+                from app.trading.trade_memory import TradeMemoryService
+                await TradeMemoryService.record_trade_experience(
+                    session=session,
+                    position=pos,
+                    exit_price=exit_price,
+                    reason=reason
+                )
+            except Exception as e:
+                logger.error("Không thể ghi kinh nghiệm giao dịch cho #%s: %s", pos.id, e)
+
         return pos
 
     @classmethod

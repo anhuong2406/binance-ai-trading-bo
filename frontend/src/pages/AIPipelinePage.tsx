@@ -14,6 +14,7 @@ import { PipelineVisualizer } from '../components/PipelineVisualizer';
 import { LiveDebateCard } from '../components/LiveDebateCard';
 import { AIAnalysisLog } from '../types';
 import { api } from '../services/api';
+import { TradeMemoryHub } from '../components/TradeMemoryHub';
 
 interface AIPipelinePageProps {
   lastReport: any;
@@ -172,6 +173,9 @@ export const AIPipelinePage: React.FC<AIPipelinePageProps> = ({ lastReport }) =>
           rejectionReason={lastReport.steps.consensus?.reason}
         />
       ) : null}
+
+      {/* Trade Memory & Adaptive Lessons Hub */}
+      <TradeMemoryHub symbolFilter={analyzingSymbol} />
 
       {/* Historical Debate Logs Table */}
       <div className="bg-bg-darker p-4 rounded-lg border border-bg-border">
