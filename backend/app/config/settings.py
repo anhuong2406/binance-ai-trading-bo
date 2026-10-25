@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     SCALPING_MODE_ENABLED: bool = True           # Chế độ lướt sóng ăn mỏng chốt nhanh
     TARGET_TAKE_PROFIT_PERCENT: float = 1.8      # Reference target for UI/prompts; actual TP follows structure and net-cost checks
     TARGET_STOP_LOSS_PERCENT: float = 1.0        # Mặc định cắt lỗ -1.0% bảo vệ vốn chặt chẽ
-    SCALPING_COOLDOWN_MINUTES: int = 5           # Cooldown ngắn cho scalping (5 phút thay vì 20)
+    SCALPING_COOLDOWN_MINUTES: int = 0           # 0 = Bỏ thời gian nghỉ Cooldown (Vào lệnh ngay không chờ)
     SCALPING_MAX_DAILY_ENTRIES: int = 0          # 0 = Không giới hạn số lệnh mở 1 ngày (Unlimited)
     SCALPING_MIN_NET_RISK_REWARD: float = 0.70
     SCALPING_TIMEFRAME: str = "5m"               # Khung 5m để biên độ nến đủ lớn (>0.8%) vượt phí sàn 0.20%
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     MAX_DRAWDOWN_PERCENT: float = 5.0          # 5% max drawdown from peak equity
     MAX_CONCURRENT_POSITIONS: int = 2          # Max 2 concurrent bot positions
     MAX_DAILY_ENTRIES: int = 0                 # 0 = Không giới hạn số lệnh/ngày (Unlimited)
-    COOLDOWN_MINUTES: int = 20                 # Min 20 min cooldown after closing a position
+    COOLDOWN_MINUTES: int = 0                  # 0 = Bỏ thời gian nghỉ Cooldown (Vào lệnh ngay sau khi đóng)
     SLIPPAGE_ESTIMATE_PERCENT: float = 0.05    # 0.05% slippage simulation
     BINANCE_TAKER_FEE_PERCENT: float = 0.1     # 0.10% spot taker fee
 

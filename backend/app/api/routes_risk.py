@@ -94,6 +94,7 @@ async def update_risk_config(req: RiskConfigUpdate, db: AsyncSession = Depends(g
 
     if req.cooldown_minutes is not None:
         settings.COOLDOWN_MINUTES = req.cooldown_minutes
+        settings.SCALPING_COOLDOWN_MINUTES = req.cooldown_minutes
 
     await record_audit(db, "RISK_RULES_UPDATED", "Cập nhật tham số quản trị rủi ro", "WARNING")
     return {"status": "SUCCESS", "message": "Đã lưu cài đặt quản trị rủi ro mới"}

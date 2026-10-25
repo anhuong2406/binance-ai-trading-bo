@@ -288,23 +288,24 @@ class RiskEngine:
                     reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({today_entry_count}/{effective_max_entries})."]
                 )
 
-        # 8. Cooldown check (Dynamic: 5 mins for Scalping, 20 mins for Standard)
+        # 8. Cooldown check (Dynamic: 0 or <= 0 means Disabled / No cooldown)
         effective_cooldown = settings.SCALPING_COOLDOWN_MINUTES if settings.SCALPING_MODE_ENABLED else settings.COOLDOWN_MINUTES
-        last_closed_stmt = select(Position).where(
-            Position.status == "CLOSED",
-            Position.mode == mode
-        ).order_by(Position.closed_at.desc()).limit(1)
-        last_closed_res = await session.execute(last_closed_stmt)
-        last_closed_pos = last_closed_res.scalar_one_or_none()
+        if effective_cooldown and effective_cooldown > 0:
+            last_closed_stmt = select(Position).where(
+                Position.status == "CLOSED",
+                Position.mode == mode
+            ).order_by(Position.closed_at.desc()).limit(1)
+            last_closed_res = await session.execute(last_closed_stmt)
+            last_closed_pos = last_closed_res.scalar_one_or_none()
 
-        if last_closed_pos and last_closed_pos.closed_at:
-            cooldown_delta = utc_now() - last_closed_pos.closed_at
-            if cooldown_delta < timedelta(minutes=effective_cooldown):
-                remaining_mins = effective_cooldown - int(cooldown_delta.total_seconds() / 60)
-                return RiskCheckResult(
-                    passed=False,
-                    reasons=[f"Đang trong thời gian nghỉ Cooldown (còn {remaining_mins} phút sau lệnh đóng gần nhất)."]
-                )
+            if last_closed_pos and last_closed_pos.closed_at:
+                cooldown_delta = utc_now() - last_closed_pos.closed_at
+                if cooldown_delta < timedelta(minutes=effective_cooldown):
+                    remaining_mins = effective_cooldown - int(cooldown_delta.total_seconds() / 60)
+                    return RiskCheckResult(
+                        passed=False,
+                        reasons=[f"Đang trong thời gian nghỉ Cooldown (còn {remaining_mins} phút sau lệnh đóng gần nhất)."]
+                    )
 
         # 9. Small Balance Mode & Position Sizing
         # Max position value = 25% of allocated capital

@@ -158,7 +158,9 @@ export const RiskControlPage: React.FC = () => {
           </div>
           <div className="flex justify-between p-2 rounded bg-bg-card border border-bg-border">
             <span className="text-gray-400">Thời gian nghỉ Cooldown:</span>
-            <span className="text-gray-100 font-bold">{riskStatus?.cooldown_minutes || 20} phút</span>
+            <span className="text-gray-100 font-bold">
+              {riskStatus?.cooldown_minutes ? `${riskStatus.cooldown_minutes} phút` : 'Đã tắt (0 phút)'}
+            </span>
           </div>
         </div>
       </div>

@@ -129,8 +129,7 @@ async def test_case_8_daily_loss_limit_reached(test_db, mock_symbol_filters):
 
 @pytest.mark.asyncio
 async def test_case_8_cooldown_period_enforced(test_db, mock_symbol_filters):
-    """Case 8: Enforces cooldown after closing a position."""
-    # Position closed 1 minute ago (within both standard 20m and scalping cooldown)
+    """Case 8: When cooldown is 0 it is disabled; when > 0 it is enforced."""
     p_closed = Position(
         symbol="BTCUSDT",
         amount=Decimal("0.001"),
@@ -143,7 +142,10 @@ async def test_case_8_cooldown_period_enforced(test_db, mock_symbol_filters):
     test_db.add(p_closed)
     await test_db.commit()
 
-    res = await risk_engine.evaluate_trade(
+    # Part 1: Default cooldown is 0 (Disabled) -> passes without cooldown rejection
+    settings.COOLDOWN_MINUTES = 0
+    settings.SCALPING_COOLDOWN_MINUTES = 0
+    res_disabled = await risk_engine.evaluate_trade(
         session=test_db,
         symbol="ETHUSDT",
         action="BUY",
@@ -155,8 +157,29 @@ async def test_case_8_cooldown_period_enforced(test_db, mock_symbol_filters):
         symbol_filters=mock_symbol_filters,
         mode="PAPER"
     )
-    assert res.passed is False
-    assert any("Cooldown" in r for r in res.reasons)
+    assert not any("Cooldown" in r for r in res_disabled.reasons)
+
+    # Part 2: Enforced when cooldown > 0
+    settings.COOLDOWN_MINUTES = 20
+    settings.SCALPING_COOLDOWN_MINUTES = 20
+    try:
+        res = await risk_engine.evaluate_trade(
+            session=test_db,
+            symbol="ETHUSDT",
+            action="BUY",
+            entry_price=3000.0,
+            stop_loss=2950.0,
+            take_profit=3150.0,
+            allocated_capital=100.0,
+            available_usdt=100.0,
+            symbol_filters=mock_symbol_filters,
+            mode="PAPER"
+        )
+        assert res.passed is False
+        assert any("Cooldown" in r for r in res.reasons)
+    finally:
+        settings.COOLDOWN_MINUTES = 0
+        settings.SCALPING_COOLDOWN_MINUTES = 0
 
 @pytest.mark.asyncio
 async def test_case_16_live_mode_locked_by_default(test_db, mock_symbol_filters):
