@@ -188,6 +188,7 @@ export interface MarketCandidate {
 
 export interface MarketRadarData {
   status: string;
+  message?: string;
   timestamp: number;
   scan_duration_ms: number;
   capital_usdt: number;

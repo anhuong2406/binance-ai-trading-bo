@@ -11,7 +11,9 @@ import {
   Activity,
   Layers,
   ChevronRight,
-  DollarSign
+  DollarSign,
+  PauseCircle,
+  ShieldAlert
 } from 'lucide-react';
 import { MarketRadarData, MarketCandidate } from '../types';
 import { api } from '../services/api';
@@ -54,9 +56,16 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
 
   useEffect(() => {
     fetchRadar();
-    // Auto-refresh radar every 60s
+    // Auto-refresh radar every 60s only when capital is sufficient
     const timer = setInterval(() => {
-      fetchRadar(false);
+      setRadar((current) => {
+        if (current && (current.status === 'INSUFFICIENT_CAPITAL' || current.capital_usdt < 1.0)) {
+          // Skip auto-polling when capital is insufficient to buy anything
+          return current;
+        }
+        fetchRadar(false);
+        return current;
+      });
     }, 60000);
     return () => clearInterval(timer);
   }, []);
@@ -121,6 +130,25 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
         <div className="py-12 flex flex-col items-center justify-center space-y-3">
           <RefreshCw className="w-8 h-8 text-amber-400 animate-spin" />
           <p className="text-sm text-gray-400">Đang quét 700+ cặp USDT trên Binance Spot và chấm điểm định lượng...</p>
+        </div>
+      ) : radar?.status === 'INSUFFICIENT_CAPITAL' ? (
+        <div className="py-8 px-4 bg-gray-800/40 border border-amber-500/30 rounded-xl text-center space-y-3 mt-4">
+          <div className="inline-flex p-3 bg-amber-500/10 rounded-full text-amber-400">
+            <PauseCircle className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-amber-300 uppercase tracking-wide">
+              Tạm Dừng Quét Thị Trường &amp; AI (Tiết Kiệm 100% Tài Nguyên)
+            </h4>
+            <p className="text-xs text-gray-300 max-w-lg mx-auto">
+              {radar.message || `Số dư khả dụng (${radar.capital_usdt.toFixed(2)} USDT) không đủ mở bất kỳ lệnh nào trên sàn Binance. Hệ thống đã tự động dừng quét để tiết kiệm 100% token AI và tài nguyên.`}
+            </p>
+          </div>
+          <div className="pt-2">
+            <span className="text-[11px] text-gray-500 italic">
+              Hệ thống sẽ tự động quét lại khi có đủ số dư khả dụng hoặc khi vị thế hiện tại chốt lời thành công.
+            </span>
+          </div>
         </div>
       ) : (
         <div className="mt-4 space-y-4">

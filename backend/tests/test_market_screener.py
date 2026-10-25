@@ -51,3 +51,19 @@ async def test_screener_scan_live_or_fallback():
         assert result["best_pick"] is not None
         assert result["best_pick"]["rank"] == 1
         assert result["best_pick"]["is_best_pick"] is True
+
+
+@pytest.mark.asyncio
+async def test_screener_insufficient_capital_stops_scanning():
+    from app.database.session import AsyncSessionLocal
+    screener = MarketScreener()
+
+    async with AsyncSessionLocal() as session:
+        # With 0.25 USDT, it cannot open any order on Binance Spot -> must stop scanning immediately!
+        result = await screener.scan_market(capital_usdt=0.25, session=session, force_refresh=True)
+        assert result["status"] == "INSUFFICIENT_CAPITAL"
+        assert result["total_screened_universe"] == 0
+        assert len(result["candidates"]) == 0
+        assert result["best_pick"] is None
+        assert "không đủ mở bất kỳ lệnh nào" in result["message"]
+

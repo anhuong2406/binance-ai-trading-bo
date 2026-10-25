@@ -59,6 +59,33 @@ class MarketScreener:
             return self._cached_radar
 
         start_time = time.time()
+
+        # Capital sanity check: If available capital is not enough to buy anything on Binance Spot, STOP scanning!
+        active_watched_symbols = set(pair_manager.get_active_symbols())
+        has_micro_pairs = any(p in ("DOGEUSDT", "SHIBUSDT") for p in active_watched_symbols)
+        min_required_capital = 1.0 if has_micro_pairs else 5.0
+
+        if capital_usdt < min_required_capital:
+            logger.info("Vốn khả dụng (%.2f USDT) < %.1f USDT không đủ mua bất kỳ mã nào. Ngừng quét thị trường.", capital_usdt, min_required_capital)
+            standby_payload = {
+                "status": "INSUFFICIENT_CAPITAL",
+                "message": (
+                    f"Số dư khả dụng ({capital_usdt:.2f} USDT) < {min_required_capital:.1f} USDT không đủ mở bất kỳ lệnh nào trên sàn Binance. "
+                    "Hệ thống đã tự động ngắt toàn bộ tác vụ quét thị trường & phân tích AI để tiết kiệm 100% tài nguyên."
+                ),
+                "timestamp": int(time.time() * 1000),
+                "scan_duration_ms": 0,
+                "capital_usdt": capital_usdt,
+                "min_notional_eligible": min_required_capital,
+                "total_screened_universe": 0,
+                "stage1_passed_count": 0,
+                "best_pick": None,
+                "candidates": []
+            }
+            self._cached_radar = standby_payload
+            self._cache_time = now
+            return standby_payload
+
         logger.info("Bắt đầu quét thị trường Binance Spot (Vốn khả dụng: %.2f USDT)...", capital_usdt)
 
         # 1. Fetch 24hr tickers for the entire exchange

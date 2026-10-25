@@ -332,20 +332,24 @@ class AutoTradingController:
                 except Exception:
                     pass
 
-            # Minimum Binance spot order: DOGEUSDT and SHIBUSDT only require 1.0 USDT!
-            # While BTC, ETH, and SOL require 5.0 USDT.
-            min_absolute_notional = 1.0
-            if avail_usdt < min_absolute_notional:
+            # Minimum Binance spot order requirement:
+            # Standard pairs (BTC, ETH, SOL, BNB, XRP...): 5.0 USDT minimum notional.
+            # Micro-notional pairs (DOGE, SHIB): 1.0 USDT minimum notional.
+            active_pairs = pair_manager.get_active_symbols()
+            has_micro_pairs = any(p in ("DOGEUSDT", "SHIBUSDT") for p in active_pairs)
+            min_required_capital = 1.0 if has_micro_pairs else 5.0
+
+            if avail_usdt < min_required_capital:
                 if open_count > 0:
                     self.standby_reason = (
-                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 1.0 USDT. "
-                        "Tạm dừng quét AI để tiết kiệm 100% token, chờ bán xong vị thế hiện tại."
+                        f"Đang nắm giữ {open_count} vị thế. Số dư khả dụng ({avail_usdt:.2f} USDT) < {min_required_capital:.1f} USDT (không đủ mua bất kỳ mã nào). "
+                        "ĐÃ DỪNG TOÀN BỘ QUÉT THỊ TRƯỜNG & AI để tiết kiệm 100% token, tập trung theo dõi chốt lời/cắt lỗ."
                     )
                     self.state = BotState.MONITORING_POSITION
                 else:
                     self.standby_reason = (
-                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < 1.0 USDT (không đủ mở bất kỳ lệnh nào trên sàn Binance). "
-                        "Tạm dừng quét AI để tiết kiệm token."
+                        f"Số dư khả dụng ({avail_usdt:.2f} USDT) < {min_required_capital:.1f} USDT (không đủ mở bất kỳ lệnh nào trên sàn Binance). "
+                        "ĐÃ DỪNG TOÀN BỘ QUÉT THỊ TRƯỜNG & AI để tiết kiệm token. Vui lòng nạp thêm USDT."
                     )
                     self.state = BotState.OBSERVING
                 await self.broadcast_status({"standby_reason": self.standby_reason})
@@ -365,6 +369,12 @@ class AutoTradingController:
                     session=session,
                     force_refresh=False
                 )
+                if screener_result.get("status") == "INSUFFICIENT_CAPITAL":
+                    self.standby_reason = screener_result.get("message")
+                    self.state = BotState.OBSERVING
+                    await self.broadcast_status({"standby_reason": self.standby_reason})
+                    return
+
                 await self.broadcast_status({"market_radar": screener_result})
                 # Prioritize Top candidates from Screener (#1 Best Pick first)
                 radar_symbols = [c["symbol"] for c in screener_result.get("candidates", [])]
