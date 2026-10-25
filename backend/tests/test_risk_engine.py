@@ -92,7 +92,7 @@ async def test_case_8_max_concurrent_positions(test_db, mock_symbol_filters):
         assert res.passed is False
         assert any("tối đa cho bot" in r for r in res.reasons)
     finally:
-        settings.MAX_CONCURRENT_POSITIONS = 0
+        settings.MAX_CONCURRENT_POSITIONS = 4
 
 @pytest.mark.asyncio
 async def test_case_8_no_martingale_adding(test_db, mock_symbol_filters):

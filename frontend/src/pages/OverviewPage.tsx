@@ -127,9 +127,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           <div className="flex items-center justify-between mb-3 border-b border-bg-border pb-2">
             <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-gray-200 flex items-center gap-2">
               <Layers className="w-4 h-4 text-bloomberg-green" />
-              Vị Thế Spot Đang Mở ({openPositions.length}/2)
+              Vị Thế Spot Đang Mở ({openPositions.length}/{status?.max_concurrent_positions || 4})
             </h3>
-            <span className="text-xs font-mono text-gray-500">Giới hạn tối đa 2 vị thế</span>
+            <span className="text-xs font-mono text-gray-500">Giới hạn tối đa {status?.max_concurrent_positions || 4} vị thế</span>
           </div>
 
           {openPositions.length === 0 ? (

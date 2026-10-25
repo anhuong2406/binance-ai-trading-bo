@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     SMALL_BALANCE_MIN_NOTIONAL_EXCEPTION_USDT: float = 6.0  # Exchange minimum exception, capped at 6 USDT to allow Binance minimum orders
     DAILY_MAX_LOSS_PERCENT: float = 2.0        # 2% max daily loss of start equity
     MAX_DRAWDOWN_PERCENT: float = 5.0          # 5% max drawdown from peak equity
-    MAX_CONCURRENT_POSITIONS: int = 0          # 0 = Không giới hạn số vị thế đồng thời (Unlimited)
+    MAX_CONCURRENT_POSITIONS: int = 4          # Nâng lên tối đa 4 vị thế mở đồng thời theo yêu cầu người dùng
     MAX_DAILY_ENTRIES: int = 0                 # 0 = Không giới hạn số lệnh/ngày (Unlimited)
     COOLDOWN_MINUTES: int = 0                  # 0 = Bỏ thời gian nghỉ Cooldown (Vào lệnh ngay sau khi đóng)
     ALLOW_SAME_SYMBOL_ENTRIES: bool = True     # True = Cho phép mua thêm (DCA / Nhồi lệnh) khi đang có vị thế mở cho cùng 1 cặp coin

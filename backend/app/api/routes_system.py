@@ -41,6 +41,7 @@ class SettingsUpdateRequest(BaseModel):
     target_stop_loss_percent: Optional[float] = None
     scalping_mode_enabled: Optional[bool] = None
     ai_single_model_mode: Optional[bool] = None
+    max_concurrent_positions: Optional[int] = None
 
 @router.get("/status")
 async def get_system_status():
@@ -59,6 +60,7 @@ async def get_system_status():
         "interval_seconds": settings.SCALPING_EVALUATION_INTERVAL_SECONDS if scalping else settings.EVALUATION_INTERVAL_SECONDS,
         "position_monitor_interval_seconds": settings.SCALPING_POSITION_MONITOR_INTERVAL_SECONDS if scalping else 15,
         "ai_single_model_mode": settings.AI_SINGLE_MODEL_MODE,
+        "max_concurrent_positions": settings.MAX_CONCURRENT_POSITIONS,
         "standby_reason": trading_controller.standby_reason
     }
 
@@ -230,6 +232,8 @@ async def update_settings(req: SettingsUpdateRequest, db: AsyncSession = Depends
         settings.TARGET_STOP_LOSS_PERCENT = round(req.target_stop_loss_percent, 2)
     if req.ai_single_model_mode is not None:
         settings.AI_SINGLE_MODEL_MODE = req.ai_single_model_mode
+    if req.max_concurrent_positions is not None:
+        settings.MAX_CONCURRENT_POSITIONS = req.max_concurrent_positions
 
     # Update active client instances
     trading_controller.binance_client.set_credentials(

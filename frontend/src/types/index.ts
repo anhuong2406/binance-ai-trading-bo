@@ -13,6 +13,7 @@ export interface SystemStatus {
   timeframe: string;
   interval_seconds: number;
   ai_single_model_mode?: boolean;
+  max_concurrent_positions?: number;
   standby_reason?: string | null;
 }
 
