@@ -129,7 +129,13 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               <Layers className="w-4 h-4 text-bloomberg-green" />
               Vị Thế Spot Đang Mở ({openPositions.length}/{status?.max_concurrent_positions || 4})
             </h3>
-            <span className="text-xs font-mono text-gray-500">Giới hạn tối đa {status?.max_concurrent_positions || 4} vị thế</span>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-500/30 px-2 py-0.5 rounded-full items-center gap-1.5 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                AI Giám Sát Tăng/Giảm Nhanh
+              </span>
+              <span className="text-xs font-mono text-gray-500">Giới hạn tối đa {status?.max_concurrent_positions || 4} vị thế</span>
+            </div>
           </div>
 
           {openPositions.length === 0 ? (

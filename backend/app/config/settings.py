@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     SCALPING_EVALUATION_INTERVAL_SECONDS: int = 60
     SCALPING_POSITION_MONITOR_INTERVAL_SECONDS: int = 5
 
+    # AI Active Exit Sentinel (Giám sát thoát vị thế thông minh khi giá tăng/giảm nhanh)
+    AI_ACTIVE_EXIT_ENABLED: bool = True          # True: Bật AI phân tích thoát vị thế khi giá tăng nhanh hoặc giảm nhanh
+    AI_ACTIVE_EXIT_SURGE_PCT: float = 0.5        # % tăng nhanh để kích hoạt AI phân tích (+0.5%)
+    AI_ACTIVE_EXIT_DROP_PCT: float = 0.4         # % giảm nhanh để kích hoạt AI phân tích (-0.4%)
+    AI_ACTIVE_EXIT_COOLDOWN_SECONDS: int = 60    # Cooldown giữa 2 lần hỏi AI cho cùng 1 vị thế (60s)
+
     # Risk Engine Rules (Conservative defaults)
     BOT_ALLOCATED_CAPITAL_USDT: float = 100.0  # Cap on spot capital allocated to bot
     MAX_RISK_PER_TRADE_PERCENT: float = 1.0     # 1% max risk per trade

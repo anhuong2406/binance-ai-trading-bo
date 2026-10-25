@@ -309,5 +309,21 @@ class PositionManager:
                 })
                 continue
 
+            # 3. AI Volatility Sentinel: Active Exit Analysis when price surges or drops rapidly
+            if execution_engine:
+                try:
+                    from app.trading.ai_exit_sentinel import ai_exit_sentinel
+                    ai_action = await ai_exit_sentinel.evaluate_open_position(
+                        session=session,
+                        position=pos,
+                        current_price=dec_price,
+                        execution_engine=execution_engine
+                    )
+                    if ai_action and ai_action.get("action") == "CLOSED":
+                        actions_taken.append(ai_action)
+                        continue
+                except Exception as ai_err:
+                    logger.warning("Lỗi AI Exit Sentinel cho vị thế #%s: %s", pos.id, ai_err)
+
         await session.commit()
         return actions_taken

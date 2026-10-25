@@ -36,7 +36,17 @@ class TradeMemoryService:
         reason_upper = (close_reason or "").upper()
 
         if outcome == "WIN":
-            if "TAKE_PROFIT" in reason_upper:
+            if "AI_SURGE_PROFIT" in reason_upper:
+                lesson = (
+                    f"Chốt lời chủ động theo AI +{pnl_pct:.2f}% khi giá tăng nhanh. "
+                    f"AI phát hiện đà tăng suy kiệt và khóa lợi nhuận kịp thời trước khi thị trường đảo chiều."
+                )
+                recommendation = (
+                    f"Chiến lược chốt lời chủ động khi giá tăng nhanh hoạt động rất hiệu quả cho {symbol}. "
+                    f"Tiếp tục bảo toàn lợi nhuận sớm khi nến xuất hiện râu trên dài hoặc lực mua cạn kiệt."
+                )
+                tag = "ai-volatility-profit"
+            elif "TAKE_PROFIT" in reason_upper:
                 lesson = (
                     f"Chốt lời thành công +{pnl_pct:.2f}% sau {hold_minutes} phút. "
                     f"Điểm vào tại {entry_price} khớp nhịp hồi kỹ thuật và chạm mục tiêu TP {exit_price} đúng kế hoạch."
@@ -57,7 +67,16 @@ class TradeMemoryService:
                 )
                 tag = "manual-win"
         elif outcome == "LOSS":
-            if "STOP_LOSS" in reason_upper:
+            if "AI_RAPID_DROP" in reason_upper:
+                lesson = (
+                    f"Cắt lỗ sớm chủ động theo AI {pnl_pct:.2f}% khi giá giảm nhanh. "
+                    f"AI phát hiện áp lực bán tháo bất thường và thoát lệnh trước khi chạm Stop Loss sâu hơn."
+                )
+                recommendation = (
+                    f"Thoát hiểm bảo vệ vốn tốt cho {symbol}. Tiếp tục giữ kỷ luật cắt lỗ sớm khi AI cảnh báo rủi ro xả mạnh."
+                )
+                tag = "ai-rapid-drop-cut"
+            elif "STOP_LOSS" in reason_upper:
                 lesson = (
                     f"Cắt lỗ chuẩn kỷ luật {pnl_pct:.2f}% tại giá {exit_price}. "
                     f"Thị trường phá vỡ đáy hỗ trợ gần nhất, Stop Loss đã kích hoạt kịp thời để chặn đà lỗ sâu."
