@@ -96,25 +96,29 @@ async def test_case_8_max_concurrent_positions(test_db, mock_symbol_filters):
 
 @pytest.mark.asyncio
 async def test_case_8_no_martingale_adding(test_db, mock_symbol_filters):
-    """Case 8: Prohibits opening a second position in the same symbol (Anti-Martingale)."""
-    p1 = Position(symbol="BTCUSDT", amount=Decimal("0.001"), entry_price=Decimal("65000"), current_price=Decimal("64000"), status="OPEN", mode="PAPER")
-    test_db.add(p1)
-    await test_db.commit()
+    """Case 8: Prohibits opening a second position in the same symbol (Anti-Martingale) when disabled."""
+    settings.ALLOW_SAME_SYMBOL_ENTRIES = False
+    try:
+        p1 = Position(symbol="BTCUSDT", amount=Decimal("0.001"), entry_price=Decimal("65000"), current_price=Decimal("64000"), status="OPEN", mode="PAPER")
+        test_db.add(p1)
+        await test_db.commit()
 
-    res = await risk_engine.evaluate_trade(
-        session=test_db,
-        symbol="BTCUSDT",
-        action="BUY",
-        entry_price=64000.0,
-        stop_loss=63500.0,
-        take_profit=66000.0,
-        allocated_capital=100.0,
-        available_usdt=100.0,
-        symbol_filters=mock_symbol_filters,
-        mode="PAPER"
-    )
-    assert res.passed is False
-    assert any("Martingale" in r for r in res.reasons)
+        res = await risk_engine.evaluate_trade(
+            session=test_db,
+            symbol="BTCUSDT",
+            action="BUY",
+            entry_price=64000.0,
+            stop_loss=63500.0,
+            take_profit=66000.0,
+            allocated_capital=100.0,
+            available_usdt=100.0,
+            symbol_filters=mock_symbol_filters,
+            mode="PAPER"
+        )
+        assert res.passed is False
+        assert any("Martingale" in r for r in res.reasons)
+    finally:
+        settings.ALLOW_SAME_SYMBOL_ENTRIES = True
 
 @pytest.mark.asyncio
 async def test_case_8_daily_loss_limit_reached(test_db, mock_symbol_filters):
@@ -243,3 +247,62 @@ async def test_case_17_emergency_stop_freezes_orders(test_db, mock_symbol_filter
     settings.EMERGENCY_STOP_ACTIVE = False
     assert res.passed is False
     assert any("EMERGENCY STOP" in r for r in res.reasons)
+
+
+@pytest.mark.asyncio
+async def test_allow_same_symbol_entries(test_db, mock_symbol_filters):
+    """Verifies that ALLOW_SAME_SYMBOL_ENTRIES allows scaling in / buying more of the same symbol."""
+    pos = Position(
+        symbol="DOGEUSDT",
+        side="BUY",
+        amount=Decimal("15.0"),
+        entry_price=Decimal("0.076"),
+        current_price=Decimal("0.076"),
+        status="OPEN",
+        mode="PAPER"
+    )
+    test_db.add(pos)
+    await test_db.commit()
+
+    # Part 1: When ALLOW_SAME_SYMBOL_ENTRIES is True (Default) -> Should NOT be rejected for duplicate symbol
+    settings.ALLOW_SAME_SYMBOL_ENTRIES = True
+    filters_doge = {
+        "minNotional": Decimal("1.0"),
+        "minQty": Decimal("1.0"),
+        "stepSize": Decimal("0.01"),
+        "tickSize": Decimal("0.00001")
+    }
+    res_allowed = await risk_engine.evaluate_trade(
+        session=test_db,
+        symbol="DOGEUSDT",
+        action="BUY",
+        entry_price=0.076,
+        stop_loss=0.075,
+        take_profit=0.078,
+        allocated_capital=100.0,
+        available_usdt=10.0,
+        symbol_filters=filters_doge,
+        mode="PAPER"
+    )
+    assert not any("Không thực hiện mua thêm" in r for r in res_allowed.reasons)
+
+    # Part 2: When ALLOW_SAME_SYMBOL_ENTRIES is False -> Must reject with duplicate symbol reason
+    settings.ALLOW_SAME_SYMBOL_ENTRIES = False
+    try:
+        res_blocked = await risk_engine.evaluate_trade(
+            session=test_db,
+            symbol="DOGEUSDT",
+            action="BUY",
+            entry_price=0.076,
+            stop_loss=0.075,
+            take_profit=0.078,
+            allocated_capital=100.0,
+            available_usdt=10.0,
+            symbol_filters=filters_doge,
+            mode="PAPER"
+        )
+        assert res_blocked.passed is False
+        assert any("Không thực hiện mua thêm" in r for r in res_blocked.reasons)
+    finally:
+        settings.ALLOW_SAME_SYMBOL_ENTRIES = True
+

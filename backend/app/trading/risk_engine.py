@@ -266,18 +266,19 @@ class RiskEngine:
                     reasons=[f"Đã đạt số lượng vị thế mở tối đa cho bot ({open_positions_count}/{settings.MAX_CONCURRENT_POSITIONS})."]
                 )
 
-        # Check if already holding this symbol
-        sym_stmt = select(func.count(Position.id)).where(
-            Position.status == "OPEN",
-            Position.symbol == symbol,
-            Position.mode == mode
-        )
-        sym_res = await session.execute(sym_stmt)
-        if (sym_res.scalar() or 0) > 0:
-            return RiskCheckResult(
-                passed=False,
-                reasons=[f"Đang có vị thế mở cho {symbol}. Không thực hiện mua thêm (Chống nhồi lệnh Martingale)."]
+        # Check if already holding this symbol (bypassed when ALLOW_SAME_SYMBOL_ENTRIES is True)
+        if not getattr(settings, "ALLOW_SAME_SYMBOL_ENTRIES", True):
+            sym_stmt = select(func.count(Position.id)).where(
+                Position.status == "OPEN",
+                Position.symbol == symbol,
+                Position.mode == mode
             )
+            sym_res = await session.execute(sym_stmt)
+            if (sym_res.scalar() or 0) > 0:
+                return RiskCheckResult(
+                    passed=False,
+                    reasons=[f"Đang có vị thế mở cho {symbol}. Không thực hiện mua thêm (Chống nhồi lệnh Martingale)."]
+                )
 
         # 7. Max daily entries check (0 or <= 0 means Unlimited)
         effective_max_entries = settings.SCALPING_MAX_DAILY_ENTRIES if settings.SCALPING_MODE_ENABLED else settings.MAX_DAILY_ENTRIES

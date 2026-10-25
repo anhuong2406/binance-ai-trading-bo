@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_POSITIONS: int = 0          # 0 = Không giới hạn số vị thế đồng thời (Unlimited)
     MAX_DAILY_ENTRIES: int = 0                 # 0 = Không giới hạn số lệnh/ngày (Unlimited)
     COOLDOWN_MINUTES: int = 0                  # 0 = Bỏ thời gian nghỉ Cooldown (Vào lệnh ngay sau khi đóng)
+    ALLOW_SAME_SYMBOL_ENTRIES: bool = True     # True = Cho phép mua thêm (DCA / Nhồi lệnh) khi đang có vị thế mở cho cùng 1 cặp coin
     SLIPPAGE_ESTIMATE_PERCENT: float = 0.05    # 0.05% slippage simulation
     BINANCE_TAKER_FEE_PERCENT: float = 0.1     # 0.10% spot taker fee
 

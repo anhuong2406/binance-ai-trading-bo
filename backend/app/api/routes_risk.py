@@ -23,6 +23,7 @@ class RiskConfigUpdate(BaseModel):
     max_concurrent_positions: Optional[int] = None
     max_daily_entries: Optional[int] = None
     cooldown_minutes: Optional[int] = None
+    allow_same_symbol_entries: Optional[bool] = None
 
 @router.get("/status")
 async def get_risk_status(db: AsyncSession = Depends(get_db)):
@@ -48,6 +49,7 @@ async def get_risk_status(db: AsyncSession = Depends(get_db)):
         "max_concurrent_positions": settings.MAX_CONCURRENT_POSITIONS,
         "max_daily_entries": max_daily_entries,
         "cooldown_minutes": cooldown_minutes,
+        "allow_same_symbol_entries": getattr(settings, "ALLOW_SAME_SYMBOL_ENTRIES", True),
         "trading_mode": trading_controller.mode,
         "scalping_mode_enabled": settings.SCALPING_MODE_ENABLED,
         "current_drawdown_percent": mode_metrics["drawdown_percent"],
@@ -93,6 +95,9 @@ async def update_risk_config(req: RiskConfigUpdate, db: AsyncSession = Depends(g
     if req.cooldown_minutes is not None:
         settings.COOLDOWN_MINUTES = req.cooldown_minutes
         settings.SCALPING_COOLDOWN_MINUTES = req.cooldown_minutes
+
+    if req.allow_same_symbol_entries is not None:
+        settings.ALLOW_SAME_SYMBOL_ENTRIES = req.allow_same_symbol_entries
 
     await record_audit(db, "RISK_RULES_UPDATED", "Cập nhật tham số quản trị rủi ro", "WARNING")
     return {"status": "SUCCESS", "message": "Đã lưu cài đặt quản trị rủi ro mới"}
