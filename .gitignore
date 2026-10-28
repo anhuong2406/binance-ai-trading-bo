@@ -15,8 +15,6 @@ backend/data/.vault.key
 # Node
 node_modules/
 frontend/node_modules/
-frontend/dist/
-dist/
 
 # External cloned subrepos
 external/
