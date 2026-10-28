@@ -3,9 +3,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+# Database & local runtime files
 *.sqlite3
-data/*.db
-data/.vault.key
+*.db
+**/*.db
+**/.vault.key
+backend/data/*.db
+backend/data/.vault.key
 .pytest_cache/
 
 # Node
