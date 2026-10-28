@@ -22,36 +22,24 @@ from app.trading.trade_memory import TradeMemoryService
 
 logger = logging.getLogger("ai_exit_sentinel")
 
-AI_EXIT_SYSTEM_PROMPT = """Bạn là Giám đốc Quản lý Rủi ro & Tối ưu Thoát Vị Thế (Active Exit & Risk Sentinel) của AI Binance Trading Company.
-Nhiệm vụ: Phân tích vị thế SPOT đang mở khi thị trường vừa ghi nhận BIẾN ĐỘNG GIÁ TĂNG NHANH hoặc GIẢM NHANH để đưa ra quyết định tối ưu: NÊN BÁN NGAY ("EXIT_NOW") hay TIẾP TỤC GIỮ ("HOLD").
+# ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
+# Compact, action-first. Chỉ nói cho AI biết đúng việc nó cần làm.
+AI_EXIT_SYSTEM_PROMPT = """Bạn là AI Quản lý Thoát Vị Thế Spot Binance.
+Nhiệm vụ: Phân tích vị thế đang mở khi giá biến động mạnh → quyết định EXIT_NOW hoặc HOLD.
 
-Quy tắc thẩm định cốt lõi:
-1. KHI GIÁ TĂNG NHANH (Rapid Surge):
-   - Đánh giá xem đà tăng có dấu hiệu suy kiệt (RSI quá mua > 70, nến rút râu trên dài, lực mua cạn, gặp tường bán lớn).
-   - Nếu có rủi ro đảo chiều xả ngược: Khuyên "EXIT_NOW" (Chốt lời non / Khóa lợi nhuận an toàn).
-   - Nếu lực đẩy vẫn rất mạnh, nến tăng đặc, khối lượng dồi dào: Khuyên "HOLD" để chạm mục tiêu Take Profit đầy đủ.
+KHI GIÁ TĂNG NHANH: EXIT_NOW nếu RSI>70 / nến râu trên / tường bán lớn (đà kiệt sức). HOLD nếu lực đẩy còn mạnh, khối lượng dồi dào.
+KHI GIÁ GIẢM NHANH: EXIT_NOW nếu bán tháo ồ ạt / thủng hỗ trợ rõ (rủi ro tiếp tục rơi). HOLD nếu chỉ là liquidity sweep ngắn hạn (volume teo, nến rút chân).
 
-2. KHI GIÁ GIẢM NHANH (Rapid Drop):
-   - Đánh giá xem nhịp giảm có khối lượng bán tháo ồ ạt, thủng hỗ trợ ngắn hạn hay không.
-   - Nếu áp lực bán quá lớn và rủi ro sập sâu: Khuyên "EXIT_NOW" để cắt lỗ sớm, bảo toàn vốn trước khi chạm Stop Loss sâu hơn.
-   - Nếu chỉ là nhịp quét thanh khoản ngắn hạn (liquidity sweep), volume bán teo tóp, nến rút chân chạm vùng cầu: Khuyên "HOLD" (Tránh bán tháo ở đáy hoảng loạn).
-
-3. ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN, KHÔNG KÈM GIẢI THÍCH NGOÀI JSON:
-{
-  "decision": "EXIT_NOW" | "HOLD",
-  "action": "SELL" | "HOLD",
-  "confidence": 0.85,
-  "urgency": "HIGH" | "MEDIUM" | "LOW",
-  "suggested_action_name": "EARLY_PROFIT_TAKE" | "EARLY_LOSS_CUT" | "HOLD_TO_TARGET",
-  "reason": "Viết lý do phân tích súc tích bằng Tiếng Việt (1-2 câu ngắn gọn giải thích tại sao nên Bán ngay hoặc nên Giữ)..."
-}
+ĐẦU RA: JSON thuần, không text ngoài JSON:
+{"decision":"EXIT_NOW","action":"SELL","confidence":0.85,"urgency":"HIGH","suggested_action_name":"EARLY_PROFIT_TAKE","reason":"1–2 câu Tiếng Việt ngắn gọn"}
 """
+
 
 class AIExitSentinel:
     def __init__(self):
-        # Maps position_id -> list of {"timestamp": float, "price": float}
+        # Maps position_id -> list of {timestamp: float, price: float}
         self._price_history: Dict[int, List[Dict[str, float]]] = {}
-        # Maps position_id -> {"timestamp": float, "price": float, "decision": str}
+        # Maps position_id -> {timestamp, price, decision, reason}
         self._last_consultation: Dict[int, Dict[str, Any]] = {}
 
     def record_price_tick(self, position_id: int, price: float):
@@ -101,8 +89,6 @@ class AIExitSentinel:
         drop_thresh = getattr(settings, "AI_ACTIVE_EXIT_DROP_PCT", 0.4)
 
         # 1. Rapid Surge condition
-        # - Velocity in last 1m >= threshold OR in last 3m >= threshold * 1.5
-        # - OR current PnL >= +0.65% (more than halfway to TP)
         is_rapid_surge = (
             velocity_1m >= surge_thresh or
             velocity_3m >= (surge_thresh * 1.4) or
@@ -110,8 +96,6 @@ class AIExitSentinel:
         )
 
         # 2. Rapid Drop condition
-        # - Velocity in last 1m <= -threshold OR in last 3m <= -threshold * 1.4
-        # - OR current PnL <= -0.45% (down towards SL)
         is_rapid_drop = (
             velocity_1m <= -drop_thresh or
             velocity_3m <= -(drop_thresh * 1.4) or
@@ -125,7 +109,7 @@ class AIExitSentinel:
                 "current_pnl_pct": round(current_pnl_pct, 2),
                 "velocity_1m": round(velocity_1m, 2),
                 "velocity_3m": round(velocity_3m, 2),
-                "description": f"Giá tăng nhanh ({velocity_1m:+.2f}% trong 1m, PnL hiện tại: {current_pnl_pct:+.2f}%)"
+                "description": f"Giá tăng nhanh ({velocity_1m:+.2f}% trong 1m, PnL: {current_pnl_pct:+.2f}%)"
             }
         elif is_rapid_drop:
             return {
@@ -134,7 +118,7 @@ class AIExitSentinel:
                 "current_pnl_pct": round(current_pnl_pct, 2),
                 "velocity_1m": round(velocity_1m, 2),
                 "velocity_3m": round(velocity_3m, 2),
-                "description": f"Giá giảm nhanh ({velocity_1m:+.2f}% trong 1m, PnL hiện tại: {current_pnl_pct:+.2f}%)"
+                "description": f"Giá giảm nhanh ({velocity_1m:+.2f}% trong 1m, PnL: {current_pnl_pct:+.2f}%)"
             }
 
         return None
@@ -158,7 +142,7 @@ class AIExitSentinel:
         if elapsed >= cooldown:
             return True
 
-        # If price moved significantly (> 0.4%) since last consultation, allow early re-check
+        # If price moved significantly (>= 0.4%) since last consultation, allow early re-check
         last_price = last_info.get("price", current_price)
         if last_price > 0:
             price_delta_pct = abs(current_price - last_price) / last_price * 100.0
@@ -322,11 +306,11 @@ class AIExitSentinel:
                 if klines and len(klines) >= 10:
                     for k in klines[-5:]:
                         klines_summary.append({
-                            "open": float(k[1]),
-                            "high": float(k[2]),
-                            "low": float(k[3]),
-                            "close": float(k[4]),
-                            "volume": float(k[5])
+                            "o": float(k[1]),
+                            "h": float(k[2]),
+                            "l": float(k[3]),
+                            "c": float(k[4]),
+                            "v": float(k[5])
                         })
 
                     # Simple 1m RSI
@@ -365,27 +349,28 @@ class AIExitSentinel:
             pass
 
         return {
-            "symbol": symbol,
-            "entry_price": float(position.entry_price),
-            "current_price": current_price,
-            "amount": float(position.amount),
-            "take_profit": float(position.take_profit) if position.take_profit else None,
-            "stop_loss": float(position.stop_loss) if position.stop_loss else None,
+            "sym": symbol,
+            "entry": float(position.entry_price),
+            "price": current_price,
+            "tp": float(position.take_profit) if position.take_profit else None,
+            "sl": float(position.stop_loss) if position.stop_loss else None,
             "event": event,
             "rsi_1m": rsi_1m,
-            "orderbook_bid_ask_ratio": orderbook_ratio,
-            "recent_1m_candles": klines_summary,
-            "trade_lessons": trade_lessons
+            "ob_ratio": orderbook_ratio,
+            "candles_1m": klines_summary,
+            "lessons": trade_lessons
         }
 
     async def _query_ai_sentinel(self, context_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Sends emergency exit evaluation request to AI Gateway."""
+        event = context_data["event"]
+        # Compact JSON — no indent to save tokens
         prompt = (
-            f"VỊ THẾ ĐANG CẦN PHÂN TÍCH KHẨN CẤP:\n"
-            f"{json.dumps(context_data, ensure_ascii=False, indent=2)}\n\n"
-            f"Yêu cầu: Hãy phân tích nhịp {context_data['event']['description']}. "
-            f"Dựa vào RSI ({context_data['rsi_1m']}), tỷ lệ Mua/Bán ({context_data['orderbook_bid_ask_ratio']}) "
-            f"và các nến 1m gần nhất, hãy đưa ra quyết định: NÊN BÁN NGAY ('EXIT_NOW') hay TIẾP TỤC GIỮ ('HOLD')?"
+            f"Vị thế cần phân tích:\n"
+            f"{json.dumps(context_data, ensure_ascii=False, separators=(',', ':'))}\n"
+            f"Sự kiện: {event['description']} | RSI_1m={context_data['rsi_1m']} | "
+            f"OB_ratio={context_data['ob_ratio']}\n"
+            f"Quyết định: EXIT_NOW hay HOLD?"
         )
 
         try:

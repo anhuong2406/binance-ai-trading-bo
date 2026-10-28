@@ -8,35 +8,36 @@ from typing import Dict, Any, Tuple, Optional
 from app.ai.gateway import AIGateway
 from app.config.settings import settings
 
-GEMINI_SYSTEM_PROMPT = """Bạn là Chief Market Analyst (Giám đốc Phân tích Thị trường) của công ty AI Binance Trading Company.
-Mục tiêu: Phân tích kỹ thuật, cấu trúc nến, khối lượng và biến động để xác định trạng thái thị trường và đề xuất kế hoạch giao dịch SPOT (Chỉ Mua/Bán Spot, không Margin/Futures).
+# ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
+# Compact & action-oriented. Khoảng ~40% ít token hơn phiên bản cũ.
+# Scalping addendum được thêm động ở dưới khi cần, tránh lặp thông tin.
+GEMINI_SYSTEM_PROMPT = """Bạn là Gemini Market Analyst — chuyên gia phân tích kỹ thuật Spot Binance (BUY/SELL/HOLD; không Margin/Futures).
 
-Yêu cầu nghiêm ngặt:
-1. Nhận diện trạng thái thị trường: TRENDING, RANGING, VOLATILE hoặc UNCERTAIN.
-2. Đánh giá sức mạnh xu hướng (0-100).
-3. Đề xuất action độc lập, không cần dự đoán trước GPT sẽ chọn gì:
-   - "BUY": Mở vị thế Spot khi có lợi thế rõ rệt.
-   - "SELL": Thoát vị thế Spot nếu đang có tín hiệu đảo chiều hoặc rủi ro.
-   - "HOLD": Giữ nguyên trạng thái, kiên nhẫn quan sát khi thị trường nhiễu.
-4. Nếu BUY: Bắt buộc cung cấp entry_price, stop_loss hợp lý (dưới hỗ trợ/dựa trên ATR), take_profit, và validity_minutes (thời hạn hiệu lực từ 15-60 phút).
-5. Nêu rõ ít nhất 2 điều kiện làm kế hoạch mất hiệu lực (invalidation_conditions).
-6. Tách dữ kiện quan sát được khỏi suy luận; nêu cả bằng chứng ủng hộ và rủi ro chính để AI thẩm định có thêm góc nhìn.
-7. Viết reasoning bằng Tiếng Việt súc tích, chuyên nghiệp theo phong cách Quantitative Trading.
-8. ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN với các trường sau, KHÔNG ĐƯỢC CÓ KÝ TỰ NÀO KHÁC NGOÀI JSON:
-{
-  "market_state": "TRENDING" | "RANGING" | "VOLATILE" | "UNCERTAIN",
-  "trend_strength": 75,
-  "action": "BUY" | "SELL" | "HOLD",
-  "symbol": "BTCUSDT",
-  "entry_price": 65400.0,
-  "stop_loss": 64200.0,
-  "take_profit": 67800.0,
-  "validity_minutes": 30,
-  "invalidation_conditions": ["Giá thủng 64000", "Khối lượng bán tăng đột biến"],
-  "reasoning": "Phân tích chi tiết...",
-  "confidence_score": 0.85
-}
+NHIỆM VỤ: Đọc dữ liệu → xác định trạng thái thị trường → đề xuất kế hoạch giao dịch.
+
+QUY TẮC BẮT BUỘC:
+1. market_state: TRENDING | RANGING | VOLATILE | UNCERTAIN
+2. action: BUY (lợi thế rõ, entry/SL/TP hợp lệ) | SELL (đảo chiều/rủi ro) | HOLD (thị trường nhiễu)
+3. Nếu BUY → PHẢI có: entry_price, stop_loss (dưới hỗ trợ/ATR), take_profit, validity_minutes (15–60)
+4. ≥2 invalidation_conditions (điều kiện làm kế hoạch mất giá trị)
+5. reasoning: Tiếng Việt — tách fact (quan sát) khỏi inference (suy luận), nêu rủi ro chính
+6. Phí Spot 0.20%: TP phải vượt phí và đạt R:R tối thiểu sau chi phí
+7. HOLD khi thiếu tín hiệu xác nhận; đừng ép BUY khi thị trường mơ hồ
+
+ĐẦU RA: JSON thuần, không markdown, không text bên ngoài JSON:
+{"market_state":"TRENDING","trend_strength":75,"action":"BUY","symbol":"BTCUSDT","entry_price":65400.0,"stop_loss":64200.0,"take_profit":67800.0,"validity_minutes":30,"invalidation_conditions":["Giá thủng 64000","KL bán đột biến"],"reasoning":"...","confidence_score":0.85}
 """
+
+# Scalping addendum — chỉ nối vào khi SCALPING_MODE_ENABLED = True
+def _build_scalping_addendum(tf: str, sl_pct: float, min_rr: float) -> str:
+    return (
+        f"\n[CHẾ ĐỘ SCALPING — {tf}] "
+        f"Mục tiêu: chốt lời nhanh từng nhịp ngắn. "
+        f"BUY hợp lệ khi: (a) Xu hướng thuận EMA9>EMA21 hoặc (b) Nảy kỹ thuật từ cận dưới Bollinger/RSI<30. "
+        f"TP theo cản gần nhất (1.0%–1.8%); SL tối đa {sl_pct}%; R:R ròng sau phí ≥{min_rr}:1. "
+        f"HOLD chỉ khi giá rơi tự do không có nến phản ứng hoặc spread >0.15%."
+    )
+
 
 class GeminiMarketAnalyst:
     def __init__(self, gateway: AIGateway):
@@ -56,39 +57,43 @@ class GeminiMarketAnalyst:
         """Run market analysis using Gemini model with enhanced trading skills."""
         target_model = model_id or settings.GEMINI_MODEL_ID
 
+        # Build compact user payload — only send what AI needs to reason
+        latest_indicators = indicators.get("latest", {})
         user_content = {
             "symbol": symbol,
             "timeframe": timeframe,
-            "market_snapshot": market_snapshot,
-            "indicators": indicators.get("latest", {}),
+            "last_price": market_snapshot.get("lastPrice"),
+            "spread_pct": market_snapshot.get("spreadPercent"),
+            "best_bid": market_snapshot.get("bestBid"),
+            "best_ask": market_snapshot.get("bestAsk"),
+            "indicators": {
+                k: v for k, v in latest_indicators.items()
+                if k in (
+                    "rsi14", "ema9", "ema21", "ema50", "macd", "macd_signal",
+                    "bb_upper", "bb_lower", "bb_mid", "atr14", "adx14",
+                    "stoch_rsi_k", "stoch_rsi_d", "volume_ratio", "market_session"
+                )
+            },
             "recent_candles": recent_candles_summary
         }
         if skills_context:
-            user_content["trading_skills_quantitative_metrics"] = skills_context
+            user_content["quant_skills"] = skills_context
 
         prompt_parts = [
-            f"Dữ liệu thị trường mới nhất cho {symbol} ({timeframe}):\n{json.dumps(user_content, ensure_ascii=False)}"
+            f"Phân tích {symbol} ({timeframe}):\n{json.dumps(user_content, ensure_ascii=False, separators=(',', ':'))}"
         ]
         if skills_prompt:
-            prompt_parts.append(f"\nCHỈ DẪN KỸ NĂNG ĐỊNH LƯỢNG (CLAUDE TRADING SKILLS):\n{skills_prompt}")
+            prompt_parts.append(f"\n[KỸ NĂNG ĐỊNH LƯỢNG]\n{skills_prompt}")
 
         user_prompt = "\n".join(prompt_parts)
 
+        # Build effective system prompt
         effective_system_prompt = GEMINI_SYSTEM_PROMPT
         if settings.SCALPING_MODE_ENABLED:
-            effective_system_prompt += (
-                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI ({settings.SCALPING_TIMEFRAME})]\n"
-                f"- Khung thời gian phân tích chính: nến {settings.SCALPING_TIMEFRAME}. Mục tiêu là chốt lãi nhanh từng nhịp sóng ngắn (0.6% - 1.5%) để tích lũy lợi nhuận bền vững.\n"
-                f"- CHIẾN THUẬT VÀO LỆNH (BUY):\n"
-                f"  1. Xu hướng thuận: Giá nằm trên EMA9/EMA21 trên nến {settings.SCALPING_TIMEFRAME}, MACD/Stoch hướng lên.\n"
-                f"  2. Săn nhịp hồi kỹ thuật (Mean Reversion / Oversold Bounce): Khi giá chạm dải dưới Bollinger Bands hoặc RSI/StochRSI ở vùng quá bán (< 30) và xuất hiện nến rút chân/đảo chiều tăng, ĐƯỢC PHÉP đề xuất BUY để ăn nhịp nảy ngắn hạn ngay cả khi khung 1H đang điều chỉnh hoặc đi ngang.\n"
-                f"- QUẢN TRỊ RỦI RO & PHÍ SÀN:\n"
-                f"  + Phí sàn Binance Spot là 0.20% (mua 0.1% + bán 0.1%). Khuyến nghị đặt mục tiêu Take Profit (TP) từ 1.0% đến 1.8% (hoặc theo kháng cự gần nhất) để tối ưu lợi nhuận ròng sau phí.\n"
-                f"  + Cắt lỗ (Stop Loss) chặt chẽ, tối đa {settings.TARGET_STOP_LOSS_PERCENT}% so với giá vào (theo đáy nến gần nhất hoặc ATR).\n"
-                f"  + Đảm bảo tỷ lệ R:R ròng sau phí đạt tối thiểu {settings.SCALPING_MIN_NET_RISK_REWARD}:1.\n"
-                f"- CHỈ ĐỀ XUẤT 'HOLD' KHI:\n"
-                f"  + Giá đang rơi tự do cắm đầu mạnh và KHÔNG CÓ bất kỳ phản ứng rút chân hay phân kỳ hồi phục nào.\n"
-                f"  + Spread bị giãn mạnh (> 0.15%) hoặc thị trường hoàn toàn bất động không có thanh khoản."
+            effective_system_prompt += _build_scalping_addendum(
+                settings.SCALPING_TIMEFRAME,
+                settings.TARGET_STOP_LOSS_PERCENT,
+                settings.SCALPING_MIN_NET_RISK_REWARD
             )
 
         data, latency_ms, usage = await self.gateway.complete_chat(

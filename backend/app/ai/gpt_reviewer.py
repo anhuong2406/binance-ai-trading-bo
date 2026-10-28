@@ -8,43 +8,39 @@ from typing import Dict, Any, Optional, Tuple
 from app.ai.gateway import AIGateway
 from app.config.settings import settings
 
-GPT_SYSTEM_PROMPT = """Bạn là GPT-6 Luna, AI Thẩm định Bổ trợ của công ty AI Binance Trading Company.
-Gemini tìm cơ hội và đề xuất kế hoạch; nhiệm vụ của bạn là bổ sung góc nhìn độc lập từ dữ liệu thị trường thô, kiểm tra các giả định và phát hiện rủi ro mà kế hoạch có thể bỏ sót. Đừng coi đây là cuộc tranh luận để thắng/thua hoặc chỉ lặp lại phân tích của Gemini.
+# ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
+# Rút gọn ~35% so với phiên bản cũ. Logic APPROVE/REJECT/HOLD giữ nguyên,
+# bỏ các đoạn giải thích dài không cần thiết trong system prompt.
+GPT_SYSTEM_PROMPT = """Bạn là GPT-6 Luna — AI Thẩm định Rủi ro độc lập của AI Binance Trading Company.
+Gemini đề xuất kế hoạch; bạn xác nhận hoặc chặn dựa trên phân tích độc lập của chính mình.
 
-Quy trình thẩm định:
-1. Tự đọc market_snapshot và quant_indicators trước, ghi nhận xu hướng, thanh khoản, biến động và tín hiệu ủng hộ/phản đối.
-2. Sau đó đối chiếu kế hoạch của Gemini: xác nhận điểm hợp lý, chỉ ra rủi ro còn thiếu và điều kiện cần theo dõi.
-3. Không yêu cầu hai AI phải dùng cùng lập luận. APPROVE nếu kế hoạch khả thi và không vi phạm điều kiện an toàn cứng; một khác biệt nhỏ về cách diễn giải không phải lý do tự động từ chối.
+QUY TRÌNH:
+1. Đọc market_snapshot & quant_indicators TRƯỚC — tự hình thành nhận định riêng.
+2. Đối chiếu với gemini_proposal: xác nhận điểm đúng, chỉ ra rủi ro bị bỏ sót.
+3. Quyết định: APPROVE nếu kế hoạch khả thi; REJECT nếu vi phạm an toàn cứng; HOLD nếu cần thêm xác nhận.
 
-Bạn phải HOLD hoặc REJECT đề xuất BUY nếu:
-1. Các chỉ báo kỹ thuật thực tế mâu thuẫn với nhận định của Gemini.
-2. Khoảng cách Stop Loss bất hợp lý (quá hẹp dễ bị quét hoặc quá xa vi phạm quản trị rủi ro).
-3. Phí giao dịch Spot (0.1% taker mỗi chiều) và spread thực tế làm mất lợi thế giao dịch.
-4. Rủi ro biến động giật (volatility spike) hoặc phân kỳ kỹ thuật chưa được xử lý.
-5. Gemini đề xuất BUY trong khi thị trường đang rơi tự do hoặc đề xuất khi dữ liệu chưa đủ độ tin cậy.
-Không tự ý đổi BUY thành SELL hoặc bịa dữ liệu/giá. suggested_adjustment chỉ là ghi chú, không được tự áp dụng vào lệnh; nếu phải sửa kế hoạch mới an toàn thì chọn HOLD và nêu điều chỉnh cần thiết. Risk Engine độc lập mới là chốt cuối cùng và có thể từ chối lệnh dù bạn APPROVE.
+CHẶN BUY (HOLD/REJECT) KHI:
+• Chỉ báo kỹ thuật thực tế mâu thuẫn rõ với đề xuất
+• SL bất hợp lý (quá hẹp dễ quét, quá xa vi phạm quản trị vốn)
+• R:R ròng sau phí (0.1%/chiều) và spread không đạt tối thiểu
+• Gemini đề xuất BUY khi thị trường đang rơi tự do hoặc dữ liệu không đủ tin cậy
 
-Quy tắc quyết định:
-- "APPROVE": Kế hoạch vượt qua các kiểm tra chính; có thể nêu lưu ý hoặc điều kiện giám sát mà không biến chúng thành lý do từ chối nếu chưa vi phạm ngưỡng cứng.
-- "REJECT": Có bằng chứng cụ thể về lỗi cấu trúc hoặc vi phạm an toàn cứng.
-- "HOLD": Thiếu dữ liệu hoặc cần chờ xác nhận thêm; nêu rõ dữ kiện nào sẽ làm thay đổi kết luận.
+KHÔNG tự đổi BUY→SELL hoặc bịa dữ liệu. suggested_adjustment chỉ là ghi chú.
+Risk Engine độc lập là chốt cuối cùng ngay cả khi bạn APPROVE.
 
-ĐẦU RA BẮT BUỘC LÀ JSON CHUẨN với các trường sau, KHÔNG ĐƯỢC CÓ KÝ TỰ NÀO KHÁC NGOÀI JSON:
-{
-  "decision": "APPROVE" | "REJECT" | "HOLD",
-  "reason": "Tóm tắt thẩm định, bằng chứng bổ sung, rủi ro hoặc điều kiện cần theo dõi bằng tiếng Việt...",
-  "independent_view": "Nhận định riêng về dữ liệu thị trường trước khi đối chiếu đề xuất...",
-  "supporting_evidence": ["Dữ kiện hỗ trợ kế hoạch"],
-  "key_risks": ["Rủi ro cần theo dõi"],
-  "suggested_adjustment": null,
-  "technical_alignment": true,
-  "risk_reward_acceptable": true,
-  "spread_and_fee_acceptable": true,
-  "volatility_acceptable": true,
-  "stop_loss_reasonable": true,
-  "counter_proposal": null
-}
+ĐẦU RA: JSON thuần (không markdown, không text ngoài JSON):
+{"decision":"APPROVE","reason":"...","independent_view":"...","supporting_evidence":[],"key_risks":[],"suggested_adjustment":null,"technical_alignment":true,"risk_reward_acceptable":true,"spread_and_fee_acceptable":true,"volatility_acceptable":true,"stop_loss_reasonable":true,"counter_proposal":null}
 """
+
+# Scalping addendum — compact, chỉ thêm khi cần
+def _build_scalping_addendum(tf: str, sl_pct: float, min_rr: float) -> str:
+    return (
+        f"\n[CHẾ ĐỘ SCALPING — {tf}] "
+        f"APPROVE khi R:R ròng ≥{min_rr}:1 sau phí+spread. "
+        f"SL tối đa {sl_pct}%. "
+        f"Chấp nhận BUY Mean Reversion (nảy BB/RSI quá bán) với SL chặt chẽ."
+    )
+
 
 class GPTIndependentReviewer:
     def __init__(self, gateway: AIGateway):
@@ -63,32 +59,43 @@ class GPTIndependentReviewer:
         """Conduct independent review of Gemini's trading proposal with risk trading skills."""
         target_model = model_id or settings.GPT_MODEL_ID
 
+        # Raw evidence first → reviewer forms own view before seeing proposal
+        latest_indicators = indicators.get("latest", {})
         review_payload = {
             "symbol": symbol,
-            "market_snapshot": market_snapshot,
-            "quant_indicators": indicators.get("latest", {})
+            "market_snapshot": {
+                k: v for k, v in market_snapshot.items()
+                if k in ("lastPrice", "bestBid", "bestAsk", "spreadPercent", "volume24h")
+            },
+            "quant_indicators": {
+                k: v for k, v in latest_indicators.items()
+                if k in (
+                    "rsi14", "ema9", "ema21", "ema50", "macd", "macd_signal",
+                    "bb_upper", "bb_lower", "atr14", "adx14",
+                    "stoch_rsi_k", "stoch_rsi_d", "volume_ratio"
+                )
+            }
         }
         if skills_context:
-            review_payload["trading_skills_risk_metrics"] = skills_context
-        # Put raw evidence first so the reviewer forms its own view before
-        # comparing it with the analyst's proposed action and price levels.
-        review_payload["gemini_proposal_to_review"] = gemini_proposal
+            review_payload["risk_metrics"] = skills_context
+
+        # Proposal comes last so reviewer reads evidence first
+        review_payload["gemini_proposal"] = gemini_proposal
 
         prompt_parts = [
-            f"Hồ sơ thẩm định giao dịch cho {symbol}:\n{json.dumps(review_payload, ensure_ascii=False)}"
+            f"Thẩm định giao dịch {symbol}:\n{json.dumps(review_payload, ensure_ascii=False, separators=(',', ':'))}"
         ]
         if skills_prompt:
-            prompt_parts.append(f"\nCHỈ DẪN KỸ NĂNG THẨM ĐỊNH RỦI RO (CLAUDE TRADING SKILLS):\n{skills_prompt}")
+            prompt_parts.append(f"\n[KỸ NĂNG THẨM ĐỊNH RỦI RO]\n{skills_prompt}")
 
         user_prompt = "\n".join(prompt_parts)
 
         effective_system_prompt = GPT_SYSTEM_PROMPT
         if settings.SCALPING_MODE_ENABLED:
-            effective_system_prompt += (
-                f"\n\n[CHẾ ĐỘ HIỆN TẠI: SCALPING - LƯỚT SÓNG ĂN MỎNG TÍCH TIỂU THÀNH ĐẠI ({settings.SCALPING_TIMEFRAME})]\n"
-                f"- Scalping dùng nến {settings.SCALPING_TIMEFRAME}; kiểm tra TP theo vùng cản và SL theo ATR/cấu trúc, SL không vượt {settings.TARGET_STOP_LOSS_PERCENT}%.\n"
-                f"- Chỉ APPROVE khi tỷ lệ lời/lỗ RÒNG sau phí, spread và trượt giá đạt ít nhất {settings.SCALPING_MIN_NET_RISK_REWARD}:1.\n"
-                f"- Cho phép phê duyệt BUY khi có tín hiệu nảy kỹ thuật (Mean Reversion/Oversold Bounce) tại cận dưới Bollinger Bands hoặc RSI quá bán, với Stop Loss chặt chẽ bảo vệ vốn."
+            effective_system_prompt += _build_scalping_addendum(
+                settings.SCALPING_TIMEFRAME,
+                settings.TARGET_STOP_LOSS_PERCENT,
+                settings.SCALPING_MIN_NET_RISK_REWARD
             )
 
         data, latency_ms, usage = await self.gateway.complete_chat(

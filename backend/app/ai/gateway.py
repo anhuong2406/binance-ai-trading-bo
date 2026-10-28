@@ -6,7 +6,8 @@ Supports structured JSON parsing, latency tracking, token accounting, and reason
 import json
 import time
 import re
-from typing import Dict, Any, Optional, Tuple
+import asyncio
+from typing import Dict, Any, Optional, Tuple, Set
 import httpx
 from app.config.settings import settings
 from app.security.sanitizer import sanitize_for_prompt
@@ -32,6 +33,8 @@ class AIGateway:
         self.base_url = self.resolve_base_url(base_url or settings.AI_BASE_URL, self.api_key)
         self.timeout = settings.AI_TIMEOUT_SECONDS
         self.max_retries = settings.AI_MAX_RETRIES
+        # Cache gateways that rejected response_format / reasoning_effort to avoid redundant 400 retries
+        self._unsupported_features: Set[str] = set()
 
     def update_config(self, base_url: str, api_key: str):
         self.api_key = api_key
@@ -94,12 +97,15 @@ class AIGateway:
             "temperature": temperature,
             "max_tokens": settings.AI_MAX_TOKENS,
             "stream": False,
-            "response_format": {"type": "json_object"}
         }
 
+        # Only add response_format if not previously rejected by this gateway
+        if "response_format" not in self._unsupported_features:
+            payload["response_format"] = {"type": "json_object"}
+
         # Add reasoning effort if model / gateway supports it
-        if reasoning_level and reasoning_level.lower() in ("high", "medium", "low"):
-            # Some gateways accept reasoning_effort
+        if (reasoning_level and reasoning_level.lower() in ("high", "medium", "low")
+                and "reasoning_effort" not in self._unsupported_features):
             payload["reasoning_effort"] = reasoning_level.lower()
 
         last_error = None
@@ -108,7 +114,7 @@ class AIGateway:
             try:
                 async with httpx.AsyncClient(timeout=active_timeout) as client:
                     resp = await client.post(endpoint, json=payload, headers=headers)
-                    
+
                     # If unauthorized or not found, fail immediately without retrying
                     if resp.status_code == 401:
                         err_msg = resp.text[:200]
@@ -120,10 +126,14 @@ class AIGateway:
                     if resp.status_code == 404:
                         raise ValueError(f"Model [{model_id}] không tồn tại trên Gateway (404)")
 
-                    # If gateway rejected response_format or reasoning_effort, retry without them
+                    # If gateway rejected response_format or reasoning_effort, strip & cache the failure
                     if resp.status_code == 400 and ("response_format" in resp.text or "reasoning" in resp.text):
-                        payload.pop("response_format", None)
-                        payload.pop("reasoning_effort", None)
+                        if "response_format" in resp.text:
+                            self._unsupported_features.add("response_format")
+                            payload.pop("response_format", None)
+                        if "reasoning" in resp.text:
+                            self._unsupported_features.add("reasoning_effort")
+                            payload.pop("reasoning_effort", None)
                         resp = await client.post(endpoint, json=payload, headers=headers)
 
                     resp.raise_for_status()
@@ -147,8 +157,7 @@ class AIGateway:
                 # the same slow model route repeatedly can stall a 1m scalping cycle.
                 if isinstance(e, httpx.TimeoutException):
                     break
-                # Wait briefly before retry
-                import asyncio
+                # Wait briefly before retry (exponential back-off: 0.5s, 1.0s, ...)
                 await asyncio.sleep(0.5 * (attempt + 1))
 
         if isinstance(last_error, httpx.TimeoutException):

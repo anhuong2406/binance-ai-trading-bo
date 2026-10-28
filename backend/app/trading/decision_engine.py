@@ -160,8 +160,8 @@ class DecisionEngine:
 
         # Format recent candles summary for AI prompt
         recent_summary = [
-            {"time": c.open_time, "o": c.open, "h": c.high, "l": c.low, "c": c.close, "v": c.volume}
-            for c in candles[-10:]
+            {"t": c.open_time, "o": c.open, "h": c.high, "l": c.low, "c": c.close, "v": c.volume}
+            for c in candles[-8:]
         ]
 
         # Step 2.5: Trading Skills Engine (Claude Trading Skills Integration)
@@ -189,17 +189,13 @@ class DecisionEngine:
                 "d": indicators["latest"]["stoch_rsi_d"]
             }
 
+        # Scalping profile — compact, verbose rules already in system prompt addendum
         if settings.SCALPING_MODE_ENABLED:
             quant_skills["scalping_profile"] = {
                 "enabled": True,
-                "reference_take_profit_percent": settings.TARGET_TAKE_PROFIT_PERCENT,
-                "max_stop_loss_percent": settings.TARGET_STOP_LOSS_PERCENT,
-                "minimum_net_risk_reward": settings.SCALPING_MIN_NET_RISK_REWARD,
-                "strategy_note": (
-                    "TP là mục tiêu tham khảo, phải theo vùng cản/ATR và chi phí thực tế; "
-                    f"SL không vượt {settings.TARGET_STOP_LOSS_PERCENT}%, R:R ròng tối thiểu "
-                    f"{settings.SCALPING_MIN_NET_RISK_REWARD}:1. Không đạt thì HOLD."
-                )
+                "tp_pct": settings.TARGET_TAKE_PROFIT_PERCENT,
+                "sl_pct": settings.TARGET_STOP_LOSS_PERCENT,
+                "min_rr": settings.SCALPING_MIN_NET_RISK_REWARD,
             }
 
         gemini_skills_prompt = skill_selector.get_gemini_skills_prompt(quant_skills)
