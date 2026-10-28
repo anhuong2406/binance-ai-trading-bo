@@ -35,10 +35,26 @@ class AIGateway:
         self.max_retries = settings.AI_MAX_RETRIES
         # Cache gateways that rejected response_format / reasoning_effort to avoid redundant 400 retries
         self._unsupported_features: Set[str] = set()
+        self._http_client: Optional[httpx.AsyncClient] = None
+
+    def _get_http_client(self, timeout: float = 90.0) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            limits = httpx.Limits(max_keepalive_connections=10, max_connections=25, keepalive_expiry=30.0)
+            self._http_client = httpx.AsyncClient(timeout=timeout, limits=limits)
+        return self._http_client
+
+    async def aclose(self):
+        if self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()
+            self._http_client = None
 
     def update_config(self, base_url: str, api_key: str):
         self.api_key = api_key
         self.base_url = self.resolve_base_url(base_url, api_key)
+        self._unsupported_features.clear()
+        if self._http_client and not self._http_client.is_closed:
+            asyncio.create_task(self._http_client.aclose())
+            self._http_client = None
 
     def _extract_json(self, raw_content: str) -> Dict[str, Any]:
         """Extract and parse valid JSON from AI response, handling markdown blocks."""
@@ -108,47 +124,47 @@ class AIGateway:
                 and "reasoning_effort" not in self._unsupported_features):
             payload["reasoning_effort"] = reasoning_level.lower()
 
+        client = self._get_http_client(timeout=active_timeout)
         last_error = None
         for attempt in range(self.max_retries):
             start_time = time.time()
             try:
-                async with httpx.AsyncClient(timeout=active_timeout) as client:
+                resp = await client.post(endpoint, json=payload, headers=headers)
+
+                # If unauthorized or not found, fail immediately without retrying
+                if resp.status_code == 401:
+                    err_msg = resp.text[:200]
+                    try:
+                        err_msg = resp.json().get("error", {}).get("message", err_msg)
+                    except Exception:
+                        pass
+                    raise ValueError(f"API Key không hợp lệ: {err_msg}")
+                if resp.status_code == 404:
+                    raise ValueError(f"Model [{model_id}] không tồn tại trên Gateway (404)")
+
+                # If gateway rejected response_format or reasoning_effort, strip & cache the failure
+                if resp.status_code == 400 and ("response_format" in resp.text or "reasoning" in resp.text):
+                    if "response_format" in resp.text:
+                        self._unsupported_features.add("response_format")
+                        payload.pop("response_format", None)
+                    if "reasoning" in resp.text:
+                        self._unsupported_features.add("reasoning_effort")
+                        payload.pop("reasoning_effort", None)
                     resp = await client.post(endpoint, json=payload, headers=headers)
 
-                    # If unauthorized or not found, fail immediately without retrying
-                    if resp.status_code == 401:
-                        err_msg = resp.text[:200]
-                        try:
-                            err_msg = resp.json().get("error", {}).get("message", err_msg)
-                        except Exception:
-                            pass
-                        raise ValueError(f"API Key không hợp lệ: {err_msg}")
-                    if resp.status_code == 404:
-                        raise ValueError(f"Model [{model_id}] không tồn tại trên Gateway (404)")
+                resp.raise_for_status()
+                latency_ms = int((time.time() - start_time) * 1000)
 
-                    # If gateway rejected response_format or reasoning_effort, strip & cache the failure
-                    if resp.status_code == 400 and ("response_format" in resp.text or "reasoning" in resp.text):
-                        if "response_format" in resp.text:
-                            self._unsupported_features.add("response_format")
-                            payload.pop("response_format", None)
-                        if "reasoning" in resp.text:
-                            self._unsupported_features.add("reasoning_effort")
-                            payload.pop("reasoning_effort", None)
-                        resp = await client.post(endpoint, json=payload, headers=headers)
+                data = resp.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    raise ValueError(f"Gateway không trả về choices nào: {data}")
 
-                    resp.raise_for_status()
-                    latency_ms = int((time.time() - start_time) * 1000)
+                content = choices[0].get("message", {}).get("content", "")
+                parsed_json = self._extract_json(content)
+                usage = data.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
 
-                    data = resp.json()
-                    choices = data.get("choices", [])
-                    if not choices:
-                        raise ValueError(f"Gateway không trả về choices nào: {data}")
-
-                    content = choices[0].get("message", {}).get("content", "")
-                    parsed_json = self._extract_json(content)
-                    usage = data.get("usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
-
-                    return parsed_json, latency_ms, usage
+                return parsed_json, latency_ms, usage
             except ValueError as ve:
                 raise ve
             except Exception as e:

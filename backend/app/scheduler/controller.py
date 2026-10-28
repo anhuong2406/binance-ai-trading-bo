@@ -257,22 +257,33 @@ class AutoTradingController:
                     self._shutdown_scheduler()
                 return
 
-            # Get prices for active pairs plus all symbols with open positions.
+            # Get prices for active pairs plus all symbols with open positions concurrently.
             prices = {}
             price_errors = {}
             symbols = set(pair_manager.get_active_symbols()) | set(open_symbols)
-            for pair in symbols:
+
+            async def _fetch_price_for_symbol(pair: str):
                 try:
-                    ticker = await self.binance_client.get_ticker_24hr(pair)
-                    prices[pair] = float(ticker.get("lastPrice", 0.0))
                     if pair in open_symbols:
+                        # For held positions, executable top bid is best for accurate SL/TP exits
                         book = await self.binance_client.get_order_book(pair, limit=5)
                         bids = book.get("bids", [])
                         if bids:
-                            # SL/TP exits are MARKET SELLs; use executable bid, not last trade.
-                            prices[pair] = float(bids[0][0])
-                except Exception as e:
-                    price_errors[pair] = str(e)
+                            return pair, float(bids[0][0]), None
+                    ticker = await self.binance_client.get_ticker_24hr(pair)
+                    return pair, float(ticker.get("lastPrice", 0.0)), None
+                except Exception as exc:
+                    return pair, None, str(exc)
+
+            pair_results = await asyncio.gather(*[_fetch_price_for_symbol(s) for s in symbols], return_exceptions=True)
+            for res in pair_results:
+                if isinstance(res, Exception):
+                    continue
+                sym, p_val, err_val = res
+                if p_val is not None:
+                    prices[sym] = p_val
+                if err_val:
+                    price_errors[sym] = err_val
 
             async with AsyncSessionLocal() as session:
                 actions = await PositionManager.update_active_positions(

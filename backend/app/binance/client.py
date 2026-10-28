@@ -29,6 +29,7 @@ class BinanceSpotClient:
         self.time_offset_ms = 0
         self._exchange_info_cache: Dict[str, Any] = {}
         self._cache_time = 0
+        self._http_client: Optional[httpx.AsyncClient] = None
 
     def set_credentials(self, api_key: str, api_secret: str, use_testnet: bool = False):
         self.api_key = api_key
@@ -40,6 +41,17 @@ class BinanceSpotClient:
 
     def _get_timestamp_ms(self) -> int:
         return int(time.time() * 1000) + self.time_offset_ms
+
+    def _get_http_client(self, timeout: float = 15.0) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            limits = httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=30.0)
+            self._http_client = httpx.AsyncClient(timeout=timeout, limits=limits)
+        return self._http_client
+
+    async def aclose(self):
+        if self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()
+            self._http_client = None
 
     def _sign_query(self, params: Dict[str, Any]) -> str:
         """Sign request params with HMAC-SHA256 according to Binance API spec, returning query string."""
@@ -60,14 +72,14 @@ class BinanceSpotClient:
     async def sync_server_time(self) -> int:
         """Synchronize local clock with Binance server time."""
         url = f"{self.base_url}/api/v3/time"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-            server_time = data["serverTime"]
-            local_time = int(time.time() * 1000)
-            self.time_offset_ms = server_time - local_time
-            return self.time_offset_ms
+        client = self._get_http_client(timeout=10.0)
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+        server_time = data["serverTime"]
+        local_time = int(time.time() * 1000)
+        self.time_offset_ms = server_time - local_time
+        return self.time_offset_ms
 
     async def _request(
         self,
@@ -91,38 +103,38 @@ class BinanceSpotClient:
         else:
             req_params = params_dict if params_dict else None
 
+        client = self._get_http_client(timeout=15.0)
         for attempt in range(retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    if method.upper() == "GET":
-                        resp = await client.get(url, params=req_params, headers=headers)
-                    elif method.upper() == "POST":
-                        resp = await client.post(url, params=req_params, headers=headers)
-                    elif method.upper() == "DELETE":
-                        resp = await client.delete(url, params=req_params, headers=headers)
-                    else:
-                        raise ValueError(f"Unsupported HTTP method {method}")
+                if method.upper() == "GET":
+                    resp = await client.get(url, params=req_params, headers=headers)
+                elif method.upper() == "POST":
+                    resp = await client.post(url, params=req_params, headers=headers)
+                elif method.upper() == "DELETE":
+                    resp = await client.delete(url, params=req_params, headers=headers)
+                else:
+                    raise ValueError(f"Unsupported HTTP method {method}")
 
-                    # Detect rate limits
-                    if resp.status_code in (429, 418):
-                        if method.upper() == "POST":
-                            resp.raise_for_status()
-                        retry_after = int(resp.headers.get("Retry-After", 10))
-                        await asyncio.sleep(retry_after)
+                # Detect rate limits
+                if resp.status_code in (429, 418):
+                    if method.upper() == "POST":
+                        resp.raise_for_status()
+                    retry_after = int(resp.headers.get("Retry-After", 10))
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                # Server timestamp mismatch (-1021)
+                if resp.status_code == 400:
+                    err_data = resp.json()
+                    if err_data.get("code") == -1021 and attempt < retries:
+                        await self.sync_server_time()
+                        if signed:
+                            signed_query = self._sign_query(params_dict)
+                            url = f"{self.base_url}{endpoint}?{signed_query}"
                         continue
 
-                    # Server timestamp mismatch (-1021)
-                    if resp.status_code == 400:
-                        err_data = resp.json()
-                        if err_data.get("code") == -1021 and attempt < retries:
-                            await self.sync_server_time()
-                            if signed:
-                                signed_query = self._sign_query(params_dict)
-                                url = f"{self.base_url}{endpoint}?{signed_query}"
-                            continue
-
-                    resp.raise_for_status()
-                    return resp.json()
+                resp.raise_for_status()
+                return resp.json()
             except httpx.HTTPStatusError as e:
                 # Never blindly replay an order placement after an HTTP error.
                 # ExecutionEngine reconciles uncertain POST outcomes by clientOrderId.

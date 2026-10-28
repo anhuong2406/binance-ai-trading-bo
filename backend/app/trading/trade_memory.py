@@ -219,23 +219,12 @@ class TradeMemoryService:
         if not all_memories:
             return ""
 
-        lines = [
-            f"[BÀI HỌC KINH NGHIỆM THỰC CHIẾN TỪ CÁC LỆNH TRƯỚC (TRADE MEMORY & LEARNING)]:"
-        ]
+        lines = ["[BÀI HỌC KINH NGHIỆM THỰC CHIẾN (TRADE MEMORY)]:"]
         for idx, m in enumerate(all_memories, 1):
-            badge = "THẮNG" if m.outcome == "WIN" else ("THUA" if m.outcome == "LOSS" else "HÒA")
-            lines.append(
-                f"{idx}. {m.symbol} ({badge} {m.pnl_percent:+.2f}% | Vào: {m.entry_price} -> Thoát: {m.exit_price}):\n"
-                f"   - Bài học: {m.lesson_learned}\n"
-                f"   - Khuyến nghị ứng dụng: {m.recommendation}"
-            )
-
-        lines.append(
-            "\n-> YÊU CẦU ĐỐI VỚI BẠN:\n"
-            "   Hãy vận dụng các bài học kinh nghiệm trên vào tình huống thị trường hiện tại. "
-            "   Nếu phát hiện các dấu hiệu từng dẫn đến thua lỗ (như nến chưa xác nhận, ngược xu hướng 1h), HÃY CHỌN 'HOLD'. "
-            "   Chỉ đề xuất 'BUY' khi cấu trúc thị trường khớp với các bài học chiến thắng hoặc có tỷ lệ R:R ròng vượt trội."
-        )
+            badge = "WIN" if m.outcome == "WIN" else ("LOSS" if m.outcome == "LOSS" else "FLAT")
+            rec = m.recommendation or m.lesson_learned
+            lines.append(f"{idx}. {m.symbol} ({badge} {m.pnl_percent:+.2f}%): {rec}")
+        lines.append("-> Vận dụng: Tránh lỗi của lệnh LOSS, ưu tiên điều kiện của lệnh WIN.")
         return "\n".join(lines)
 
     @classmethod
