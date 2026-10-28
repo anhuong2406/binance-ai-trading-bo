@@ -40,7 +40,7 @@ BƯỚC 3: CHÉP MÃ NGUỒN BOT VÀO ĐIỆN THOẠI
 Có 2 cách để đưa mã nguồn vào Termux:
 
 [Cách A] Nếu bạn đã đẩy code lên GitHub cá nhân (Khuyên dùng):
-   git clone <link_repo_github_cua_ban> kind-pasteur
+   git clone https://github.com/anhuong2406/binance-ai-trading-bo.git kind-pasteur
    cd kind-pasteur
 
 [Cách B] Chép từ máy tính PC sang điện thoại qua cáp USB:
