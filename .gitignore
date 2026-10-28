@@ -18,6 +18,9 @@ frontend/node_modules/
 frontend/dist/
 dist/
 
+# External cloned subrepos
+external/
+
 # Environment & Local Secrets
 .env
 .DS_Store

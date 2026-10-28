@@ -1,0 +1,123 @@
+================================================================================
+ HƯỚNG DẪN CHI TIẾT: CÀI ĐẶT & CHẠY BOT AI BINANCE TRỰC TIẾP TRÊN ANDROID (TERMUX)
+================================================================================
+
+[LƯU Ý QUAN TRỌNG TRƯỚC KHI THỰC HIỆN]
+- Hệ thống này chỉ có thể chạy trực tiếp trên ĐIỆN THOẠI ANDROID (hệ điều hành iOS của 
+  iPhone bị Apple đóng kín, không hỗ trợ môi trường biên dịch Linux chạy nền 24/7).
+- Yêu cầu điện thoại: Android 8.0 trở lên, RAM tối thiểu 3GB, bộ nhớ trống từ 2GB.
+
+--------------------------------------------------------------------------------
+BƯỚC 1: TẢI VÀ CÀI ĐẶT ỨNG DỤNG TERMUX
+--------------------------------------------------------------------------------
+1. TUYỆT ĐỐI KHÔNG tải Termux trên Google Play Store (CH Play) vì phiên bản đó đã cũ,
+   bị chặn cập nhật kho gói từ năm 2020 nên sẽ lỗi 100% khi cài đặt.
+2. Tải bản Termux chuẩn mới nhất từ kho F-Droid:
+   - Link tải APK trực tiếp: https://f-droid.org/repo/com.termux_118.apk
+   (Hoặc vào https://f-droid.org, tìm "Termux" và tải bản mới nhất).
+3. Cài đặt file APK vừa tải vào điện thoại và cấp quyền cơ bản khi mở ứng dụng.
+
+--------------------------------------------------------------------------------
+BƯỚC 2: CẬP NHẬT KHO GÓI & CÀI ĐẶT CÁC CÔNG CỤ NỀN TẢNG
+--------------------------------------------------------------------------------
+Mở ứng dụng Termux lên, sao chép từng dòng lệnh dưới đây và dán vào Termux rồi nhấn Enter:
+
+1. Cập nhật hệ thống:
+   pkg update && pkg upgrade -y
+
+2. Cấp quyền truy cập bộ nhớ máy (khi có hộp thoại hiện lên, bấm "Cho phép" / "Allow"):
+   termux-setup-storage
+
+3. Cài đặt Git, Python và các công cụ biên dịch mã C/Rust (bắt buộc cho thư viện tài chính):
+   pkg install git python clang rust make libffi openssl libxml2 libxslt -y
+
+4. Nâng cấp trình quản lý gói pip:
+   pip install --upgrade pip setuptools wheel
+
+--------------------------------------------------------------------------------
+BƯỚC 3: CHÉP MÃ NGUỒN BOT VÀO ĐIỆN THOẠI
+--------------------------------------------------------------------------------
+Có 2 cách để đưa mã nguồn vào Termux:
+
+[Cách A] Nếu bạn đã đẩy code lên GitHub cá nhân (Khuyên dùng):
+   git clone <link_repo_github_cua_ban> kind-pasteur
+   cd kind-pasteur
+
+[Cách B] Chép từ máy tính PC sang điện thoại qua cáp USB:
+   - Nén thư mục "kind-pasteur" trên PC thành file ZIP.
+   - Chép vào bộ nhớ trong của điện thoại (ví dụ thư mục Download).
+   - Trong Termux, giải nén và di chuyển:
+     pkg install unzip -y
+     unzip /sdcard/Download/kind-pasteur.zip -d ~/
+     cd ~/kind-pasteur
+
+--------------------------------------------------------------------------------
+BƯỚC 4: CÀI ĐẶT CÁC THƯ VIỆN PYTHON (REQUIREMENTS)
+--------------------------------------------------------------------------------
+Trong thư mục dự án bot trên Termux, chạy lệnh sau:
+   pip install -r backend/requirements.txt
+
+(Quá trình này mất khoảng 2-5 phút tùy theo tốc độ mạng và cấu hình điện thoại).
+
+--------------------------------------------------------------------------------
+BƯỚC 5: CẤU HÌNH FILE MÔI TRƯỜNG (.env) TRÊN ĐIỆN THOẠI
+--------------------------------------------------------------------------------
+1. Kiểm tra file cấu hình trong thư mục backend:
+   cd backend
+   cp .env.example .env (nếu chưa có file .env)
+   nano .env
+
+2. Chỉnh sửa các thông số quan trọng:
+   - BINANCE_API_KEY=Điền_API_Key_Binance_của_bạn
+   - BINANCE_API_SECRET=Điền_API_Secret_Binance_của_bạn
+   - AI_BASE_URL: Vì trên PC dùng proxy nội bộ (http://localhost:20128), khi sang 
+     điện thoại bạn cần đổi sang địa chỉ API Gateway mà điện thoại kết nối được, 
+     hoặc dùng trực tiếp Google Gemini API.
+   - AI_API_KEY=Điền_API_Key_AI_của_bạn
+   - HOST=127.0.0.1
+   - PORT=8000
+
+(Nhấn Ctrl + O rồi Enter để Lưu, nhấn Ctrl + X để Thoát trình soạn thảo nano).
+
+--------------------------------------------------------------------------------
+BƯỚC 6: KHỞI ĐỘNG BOT VÀ MỞ GIAO DIỆN TRÊN ĐIỆN THOẠI
+--------------------------------------------------------------------------------
+1. Khởi chạy máy chủ:
+   python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+2. Khi màn hình hiện thông báo máy chủ đang chạy:
+   - Mở trình duyệt web trên điện thoại (Google Chrome).
+   - Truy cập vào địa chỉ:
+     http://127.0.0.1:8000
+   - Màn hình giao diện bot điều khiển trading sẽ xuất hiện đầy đủ!
+
+--------------------------------------------------------------------------------
+BƯỚC 7: CỰC KỲ QUAN TRỌNG: THIẾT LẬP CHẠY NGẦM 24/7 KHÔNG BỊ TẮT
+--------------------------------------------------------------------------------
+Mặc định hệ điều hành Android sẽ tự động "giết" (kill) các ứng dụng chạy nền sau 
+vài phút tắt màn hình để tiết kiệm pin. BẮT BUỘC phải làm 3 thao tác sau:
+
+1. Bật Wake-lock trong Termux:
+   - Vuốt thanh thông báo từ trên đỉnh màn hình điện thoại xuống.
+   - Tại thông báo của Termux, nhấn vào chữ: "Acquire Wake-lock"
+   (Hoặc trong Termux gõ lệnh: termux-wake-lock rồi Enter).
+   Khi có chữ "Wake lock held" là CPU sẽ không bị ngủ khi tắt màn hình.
+
+2. Tắt tính năng Tối ưu hóa pin của Android cho Termux:
+   - Vào Cài đặt điện thoại -> Ứng dụng -> Quản lý ứng dụng -> Termux.
+   - Tìm mục "Tiết kiệm pin" (Battery Saver) -> Chọn: "Không hạn chế" (No restrictions).
+   - Bật quyền "Tự khởi chạy" (Autostart) nếu máy bạn là Xiaomi/Oppo/Vivo/Realme.
+
+3. Khóa ứng dụng trong màn hình Đa nhiệm:
+   - Mở màn hình đa nhiệm (các ứng dụng đang mở gần đây).
+   - Nhấn giữ vào ứng dụng Termux -> Bấm vào biểu tượng Ổ KHÓA (Lock) để hệ thống 
+     không bao giờ tự xóa Termux khi dọn dẹp RAM.
+
+--------------------------------------------------------------------------------
+BƯỚC 8: DỪNG HOẶC KHỞI ĐỘNG LẠI BOT
+--------------------------------------------------------------------------------
+- Để Dừng bot: Vào lại Termux, nhấn tổ hợp phím: Ctrl + C
+- Để Khởi động lại:
+  cd ~/kind-pasteur/backend
+  python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+================================================================================
