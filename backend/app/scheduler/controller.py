@@ -71,7 +71,7 @@ class AutoTradingController:
 
     def _ensure_monitor_scheduler(self):
         if not self.scheduler:
-            self.scheduler = AsyncIOScheduler()
+            self.scheduler = AsyncIOScheduler(timezone="UTC")
             self.scheduler.start()
         self.scheduler.add_job(
             self.run_position_monitor,
