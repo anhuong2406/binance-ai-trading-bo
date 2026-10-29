@@ -17,7 +17,7 @@ from sqlalchemy import select, func
 
 from app.config.settings import settings
 from app.binance.client import BinanceSpotClient
-from app.trading.quant_engine import QuantEngine
+from app.trading.quant_engine import QuantEngine, calculate_rsi, calculate_ema
 from app.trading.pair_manager import pair_manager
 from app.database.models import TradeMemory
 
@@ -249,10 +249,17 @@ class MarketScreener:
         return result_payload
 
     async def _fetch_technical_profile(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetches 15m candles and computes key technical indicators."""
+        """Fetches 15m candles and computes key technical indicators.
+
+        Uses limit=50 for reliable warmup:
+          - EMA-21 needs 21 bars, EMA-9 needs 9 bars
+          - ATR-14 needs 14 TrueRange values (15 bars)
+          - Wilder RSI-14 needs 28+ bars for proper smoothing
+          Buffer: 50 - 28 = 22 bars extra → stable values.
+        """
         try:
-            klines = await self.binance_client.get_klines(symbol, interval="15m", limit=35)
-            if not klines or len(klines) < 20:
+            klines = await self.binance_client.get_klines(symbol, interval="15m", limit=50)
+            if not klines or len(klines) < 28:
                 return None
 
             highs = [float(k[2]) for k in klines]
@@ -261,7 +268,7 @@ class MarketScreener:
             volumes = [float(k[5]) for k in klines]
             last_price = closes[-1]
 
-            # 1. ATR (14)
+            # 1. ATR-14 (simple average of last 14 TrueRanges — fast and sufficient for screening)
             tr_list = []
             for j in range(1, len(klines)):
                 tr = max(
@@ -273,41 +280,34 @@ class MarketScreener:
             atr14 = sum(tr_list[-14:]) / 14 if len(tr_list) >= 14 else (highs[-1] - lows[-1])
             atr_percent = (atr14 / last_price * 100) if last_price > 0 else 1.5
 
-            # 2. RSI (14)
+            # 2. RSI-14 — Wilder's smoothing (proper, reusing QuantEngine logic)
             rsi = 50.0
-            gains, losses = [], []
-            for j in range(1, len(closes)):
-                diff = closes[j] - closes[j - 1]
-                if diff >= 0:
-                    gains.append(diff)
-                    losses.append(0.0)
+            rsi_series = calculate_rsi(closes, period=14)
+            valid_rsi = [v for v in rsi_series if v is not None]
+            if valid_rsi:
+                rsi = valid_rsi[-1]
+
+            # 3. EMA Trend: true EMA-9 vs EMA-21 (reusing QuantEngine logic)
+            ema9_series = calculate_ema(closes, period=9)
+            ema21_series = calculate_ema(closes, period=21)
+            ema9_vals = [v for v in ema9_series if v is not None]
+            ema21_vals = [v for v in ema21_series if v is not None]
+
+            if ema9_vals and ema21_vals:
+                ema9_cur = ema9_vals[-1]
+                ema21_cur = ema21_vals[-1]
+                if ema9_cur > ema21_cur * 1.002:
+                    ema_trend = "BULLISH"
+                elif ema9_cur < ema21_cur * 0.998:
+                    ema_trend = "BEARISH"
                 else:
-                    gains.append(0.0)
-                    losses.append(abs(diff))
-
-            if len(gains) >= 14:
-                avg_gain = sum(gains[-14:]) / 14
-                avg_loss = sum(losses[-14:]) / 14
-                if avg_loss == 0:
-                    rsi = 100.0
-                else:
-                    rs = avg_gain / avg_loss
-                    rsi = 100.0 - (100.0 / (1.0 + rs))
-
-            # 3. EMA Trend (EMA 9 vs EMA 21)
-            ema9 = sum(closes[-9:]) / 9 if len(closes) >= 9 else closes[-1]
-            ema21 = sum(closes[-21:]) / 21 if len(closes) >= 21 else closes[-1]
-
-            if ema9 > ema21 * 1.002:
-                ema_trend = "BULLISH"
-            elif ema9 < ema21 * 0.998:
-                ema_trend = "BEARISH"
+                    ema_trend = "NEUTRAL"
             else:
                 ema_trend = "NEUTRAL"
 
-            # 4. Volume ratio
+            # 4. Volume ratio: last bar vs 14-bar average (match ATR period)
             recent_vol = volumes[-1]
-            avg_vol = sum(volumes[-15:]) / 15 if len(volumes) >= 15 else recent_vol
+            avg_vol = sum(volumes[-14:]) / 14 if len(volumes) >= 14 else recent_vol
             vol_ratio = (recent_vol / avg_vol) if avg_vol > 0 else 1.0
 
             return {
@@ -370,11 +370,14 @@ class MarketScreener:
         elif 1.0 <= atr_percent < 1.5:
             breakdown["volatility"] = 18
             reasons.append(f"Biên độ ATR {atr_percent:.1f}% khá tốt")
+        elif 3.5 < atr_percent <= 5.0:
+            breakdown["volatility"] = 18
+            reasons.append(f"Biên độ ATR {atr_percent:.1f}% cao, cần SL rộng hơn")
         elif 0.6 <= atr_percent < 1.0:
             breakdown["volatility"] = 12
         elif atr_percent > 5.0:
-            breakdown["volatility"] = 12
-            reasons.append("Biến động mạnh, cần kiểm soát rủi ro")
+            breakdown["volatility"] = 10
+            reasons.append("Biến động quá mạnh, rủi ro cao")
         else:
             breakdown["volatility"] = 6
             reasons.append("Biến động thấp, chậm chốt lời")
@@ -430,68 +433,56 @@ class MarketScreener:
         session: AsyncSession,
         symbols: List[str]
     ) -> Dict[str, Dict[str, Any]]:
-        """Queries historical trade performance for a list of symbols."""
-        stats = {}
-        for sym in symbols:
-            stmt = select(TradeMemory.outcome).where(TradeMemory.symbol == sym)
-            res = await session.execute(stmt)
-            outcomes = list(res.scalars().all())
-            total = len(outcomes)
-            if total > 0:
-                wins = sum(1 for o in outcomes if o == "WIN")
-                win_rate = (wins / total) * 100.0
-                stats[sym] = {"trades": total, "win_rate": win_rate}
-            else:
-                stats[sym] = {"trades": 0, "win_rate": 0.0}
+        """Queries historical trade performance for a list of symbols.
+
+        Uses a single batch IN (...) query instead of N separate queries
+        to avoid the N+1 database round-trip pattern.
+        """
+        if not symbols:
+            return {}
+
+        stats: Dict[str, Dict[str, Any]] = {s: {"trades": 0, "win_rate": 0.0} for s in symbols}
+
+        # Single batch query: fetch symbol + outcome for all symbols at once
+        stmt = (
+            select(TradeMemory.symbol, TradeMemory.outcome)
+            .where(TradeMemory.symbol.in_(symbols))
+        )
+        res = await session.execute(stmt)
+        rows = res.all()  # list of (symbol, outcome) tuples
+
+        # Aggregate in Python — avoids GROUP BY complexity while keeping 1 round-trip
+        counts: Dict[str, Dict[str, int]] = {}
+        for sym, outcome in rows:
+            if sym not in counts:
+                counts[sym] = {"total": 0, "wins": 0}
+            counts[sym]["total"] += 1
+            if outcome == "WIN":
+                counts[sym]["wins"] += 1
+
+        for sym, c in counts.items():
+            win_rate = (c["wins"] / c["total"]) * 100.0 if c["total"] > 0 else 0.0
+            stats[sym] = {"trades": c["total"], "win_rate": win_rate}
+
         return stats
 
     def _fallback_response(self, capital_usdt: float, message: str) -> Dict[str, Any]:
-        """Provides graceful fallback response if network fails."""
-        default_candidates = [
-            {
-                "symbol": "ETHUSDT",
-                "price": 2348.0,
-                "price_change_24h": 0.5,
-                "quote_volume_m": 450.0,
-                "atr_percent": 1.6,
-                "rsi14": 52.0,
-                "ema_trend": "BULLISH",
-                "score": 82,
-                "rank": 1,
-                "is_best_pick": True,
-                "reason": "Mã trụ thanh khoản cao, biên độ phù hợp cho lệnh an toàn",
-                "historical_win_rate": 50.0,
-                "historical_trades": 2,
-                "is_watched": True
-            },
-            {
-                "symbol": "BTCUSDT",
-                "price": 80500.0,
-                "price_change_24h": -0.2,
-                "quote_volume_m": 800.0,
-                "atr_percent": 1.1,
-                "rsi14": 49.0,
-                "ema_trend": "NEUTRAL",
-                "score": 75,
-                "rank": 2,
-                "is_best_pick": False,
-                "reason": "Mã vốn hóa lớn nhất, độ an toàn cao",
-                "historical_win_rate": 60.0,
-                "historical_trades": 5,
-                "is_watched": True
-            }
-        ]
+        """Provides graceful fallback response if network fails.
+
+        Note: Returns empty candidates — no hardcoded stale prices.
+        The frontend should display the error message and retry.
+        """
         return {
             "status": "FALLBACK",
-            "message": message,
+            "message": f"⚠️ Không thể quét thị trường: {message}. Kiểm tra kết nối mạng và thử lại.",
             "timestamp": int(time.time() * 1000),
             "scan_duration_ms": 0,
             "capital_usdt": capital_usdt,
             "min_notional_eligible": 1.0 if capital_usdt < 5.0 else 5.0,
             "total_screened_universe": 0,
-            "stage1_passed_count": len(default_candidates),
-            "best_pick": default_candidates[0],
-            "candidates": default_candidates
+            "stage1_passed_count": 0,
+            "best_pick": None,
+            "candidates": []
         }
 
 # Global singleton instance
