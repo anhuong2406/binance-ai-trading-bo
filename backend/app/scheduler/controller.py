@@ -47,6 +47,7 @@ class AutoTradingController:
         self.decision_engine = DecisionEngine(self.binance_client)
         self.standby_reason: Optional[str] = None
         self._ws_broadcast_callback = None
+        self._cycle_lock = asyncio.Lock()
 
     def set_ws_broadcast(self, callback):
         self._ws_broadcast_callback = callback
@@ -301,6 +302,12 @@ class AutoTradingController:
                             f"Lý do: {act['reason']} | PnL: {act['pnl']:.2f} USDT"
                         )
                     await self.broadcast_status({"position_actions": actions, "standby_reason": None})
+
+                    # ⚡ ĐỘ TRỄ BẰNG 0: Ngay khi vừa chốt vị thế, lập tức kích hoạt chu kỳ quét mới!
+                    # Không cần chờ hết 60s/20s giúp vào lệnh kịp thời, tránh trễ giá.
+                    if self.is_running and not settings.EMERGENCY_STOP_ACTIVE:
+                        logger.info("⚡ Vị thế vừa đóng. Lập tức kích hoạt quét tìm cơ hội mới sau 1.5s...")
+                        asyncio.create_task(self._trigger_immediate_evaluation())
             remaining_symbols = await self._get_open_position_symbols()
             if price_errors:
                 await self.broadcast_status({"position_price_errors": price_errors})
@@ -310,10 +317,25 @@ class AutoTradingController:
             self.state = BotState.ERROR
             await self.broadcast_status({"position_monitor_error": str(e)})
 
-    async def run_scheduled_cycle(self):
+    async def _trigger_immediate_evaluation(self):
+        """Executes an immediate evaluation cycle after an exit without waiting for timer."""
+        await asyncio.sleep(1.5)  # 1.5s buffer for Binance balances to settle
+        if self.is_running and not settings.EMERGENCY_STOP_ACTIVE:
+            await self.run_scheduled_cycle(force_screener_refresh=True)
+
+    async def run_scheduled_cycle(self, force_screener_refresh: bool = False):
         """Executes one evaluation cycle across active pairs."""
         if not self.is_running or settings.EMERGENCY_STOP_ACTIVE:
             return
+
+        if self._cycle_lock.locked():
+            logger.debug("Chu kỳ đánh giá đang chạy, bỏ qua gọi trùng lặp.")
+            return
+
+        async with self._cycle_lock:
+            await self._run_scheduled_cycle_internal(force_screener_refresh=force_screener_refresh)
+
+    async def _run_scheduled_cycle_internal(self, force_screener_refresh: bool = False):
 
         async with AsyncSessionLocal() as session:
             # Check open positions count
@@ -378,7 +400,7 @@ class AutoTradingController:
                 screener_result = await market_screener.scan_market(
                     capital_usdt=avail_usdt,
                     session=session,
-                    force_refresh=False
+                    force_refresh=force_screener_refresh
                 )
                 if screener_result.get("status") == "INSUFFICIENT_CAPITAL":
                     self.standby_reason = screener_result.get("message")

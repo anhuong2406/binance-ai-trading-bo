@@ -70,7 +70,9 @@ class Settings(BaseSettings):
     SCALPING_MAX_DAILY_ENTRIES: int = 0          # 0 = Không giới hạn số lệnh mở 1 ngày (Unlimited)
     SCALPING_MIN_NET_RISK_REWARD: float = 0.70
     SCALPING_TIMEFRAME: str = "5m"               # Khung 5m để biên độ nến đủ lớn (>0.8%) vượt phí sàn 0.20%
-    SCALPING_EVALUATION_INTERVAL_SECONDS: int = 60
+    SCALPING_EVALUATION_INTERVAL_SECONDS: int = 20
+    ANTI_CHASING_GUARD_ENABLED: bool = True        # Chống mua đuổi giá cao hơn lúc vừa chốt lời
+    ANTI_CHASING_WINDOW_MINUTES: int = 5           # Cửa sổ quan sát (5 phút) sau khi vừa chốt lời
     SCALPING_POSITION_MONITOR_INTERVAL_SECONDS: int = 5
 
     # AI Active Exit Sentinel (Giám sát thoát vị thế thông minh khi giá tăng/giảm nhanh)

@@ -120,6 +120,7 @@ async def test_case_8_no_martingale_adding(test_db, mock_symbol_filters):
     finally:
         settings.ALLOW_SAME_SYMBOL_ENTRIES = True
 
+
 @pytest.mark.asyncio
 async def test_case_8_daily_loss_limit_reached(test_db, mock_symbol_filters):
     """Case 8: Rejects when daily loss limit (2%) has been breached."""
@@ -305,4 +306,39 @@ async def test_allow_same_symbol_entries(test_db, mock_symbol_filters):
         assert any("Không thực hiện mua thêm" in r for r in res_blocked.reasons)
     finally:
         settings.ALLOW_SAME_SYMBOL_ENTRIES = True
+
+
+@pytest.mark.asyncio
+async def test_anti_chasing_guard_blocks_buying_higher_than_exit(test_db, mock_symbol_filters):
+    """Anti-Chasing: blocks BUY if same symbol was closed with WIN in last 5m and price is higher."""
+    pos = Position(
+        symbol="BTCUSDT",
+        side="BUY",
+        amount=Decimal("0.001"),
+        entry_price=Decimal("64000.0"),
+        current_price=Decimal("65000.0"),
+        realized_pnl=Decimal("1.0"),
+        status="CLOSED",
+        mode="PAPER",
+        opened_at=utc_now() - timedelta(minutes=10),
+        closed_at=utc_now() - timedelta(minutes=2)
+    )
+    test_db.add(pos)
+    await test_db.commit()
+
+    # Attempt to buy at 65500 (> 65000) within 5 mins
+    res = await risk_engine.evaluate_trade(
+        session=test_db,
+        symbol="BTCUSDT",
+        action="BUY",
+        entry_price=65500.0,
+        stop_loss=64500.0,
+        take_profit=68500.0,
+        allocated_capital=100.0,
+        available_usdt=50.0,
+        symbol_filters=mock_symbol_filters,
+        mode="PAPER"
+    )
+    assert res.passed is False
+    assert any("Chống Mua Đuổi" in r for r in res.reasons)
 

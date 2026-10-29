@@ -290,6 +290,40 @@ class RiskEngine:
                     reasons=[f"Đã đạt giới hạn số lệnh mở trong ngày ({today_entry_count}/{effective_max_entries})."]
                 )
 
+        # 7b. Anti-Chasing Guard (Chống mua đuổi giá cao hơn lúc vừa chốt lời)
+        if getattr(settings, "ANTI_CHASING_GUARD_ENABLED", True):
+            anti_chase_mins = getattr(settings, "ANTI_CHASING_WINDOW_MINUTES", 5)
+            last_win_stmt = (
+                select(Position)
+                .where(
+                    Position.symbol == symbol,
+                    Position.status == "CLOSED",
+                    Position.mode == mode,
+                    Position.realized_pnl > 0
+                )
+                .order_by(Position.closed_at.desc())
+                .limit(1)
+            )
+            last_win_res = await session.execute(last_win_stmt)
+            last_win_pos = last_win_res.scalar_one_or_none()
+
+            if last_win_pos and last_win_pos.closed_at and last_win_pos.current_price:
+                delta_mins = (utc_now() - last_win_pos.closed_at).total_seconds() / 60.0
+                if delta_mins <= anti_chase_mins:
+                    exit_p = float(last_win_pos.current_price)
+                    cur_p = float(entry_price)
+                    # Nếu giá hiện tại cao hơn giá vừa chốt lời > 0.3%: Chặn mua đuổi đỉnh!
+                    if cur_p > exit_p * 1.003:
+                        diff_pct = ((cur_p - exit_p) / exit_p) * 100.0
+                        return RiskCheckResult(
+                            passed=False,
+                            reasons=[
+                                f"Cảnh báo Chống Mua Đuổi: {symbol} vừa chốt lời {delta_mins:.1f}p trước ở giá {exit_p:.4f}. "
+                                f"Giá hiện tại ({cur_p:.4f}, +{diff_pct:.2f}%) cao hơn lúc chốt. "
+                                "Chờ giá thoái lui (pullback) về vùng an toàn hoặc để Radar chọn mã khác ở chân sóng."
+                            ]
+                        )
+
         # 8. Cooldown check (Dynamic: 0 or <= 0 means Disabled / No cooldown)
         effective_cooldown = settings.SCALPING_COOLDOWN_MINUTES if settings.SCALPING_MODE_ENABLED else settings.COOLDOWN_MINUTES
         if effective_cooldown and effective_cooldown > 0:
