@@ -171,6 +171,7 @@ export interface MarketCandidate {
   atr_percent: number;
   rsi14: number;
   ema_trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  volume_ratio?: number;
   score: number;
   score_breakdown: {
     momentum: number;

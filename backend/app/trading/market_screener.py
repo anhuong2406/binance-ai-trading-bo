@@ -143,7 +143,10 @@ class MarketScreener:
             key=lambda c: (1 if c["is_watched"] else 0, c["quote_volume"]),
             reverse=True
         )
-        selected_for_deep_scan = stage1_candidates[:12]
+        # Dynamic deep scan limit: always include all watched symbols + top liquid coins
+        # min 12 slots, expands when user has many watched symbols
+        n_deep_scan = max(12, len(active_watched_symbols) + 6)
+        selected_for_deep_scan = stage1_candidates[:n_deep_scan]
 
         if not selected_for_deep_scan:
             return self._fallback_response(capital_usdt, "Không tìm thấy mã nào thỏa mãn điều kiện lọc Tầng 1.")
@@ -194,6 +197,7 @@ class MarketScreener:
                 atr_percent=tech_data["atr_percent"],
                 rsi14=tech_data["rsi14"],
                 ema_trend=tech_data["ema_trend"],
+                vol_ratio=tech_data.get("volume_ratio", 1.0),
                 mem_stats=mem_data
             )
 
@@ -205,6 +209,7 @@ class MarketScreener:
                 "atr_percent": round(tech_data["atr_percent"], 2),
                 "rsi14": round(tech_data["rsi14"], 1),
                 "ema_trend": tech_data["ema_trend"],
+                "volume_ratio": round(tech_data.get("volume_ratio", 1.0), 2),
                 "score": score,
                 "score_breakdown": breakdown,
                 "reason": reason,
@@ -327,10 +332,12 @@ class MarketScreener:
         atr_percent: float,
         rsi14: float,
         ema_trend: str,
-        mem_stats: Dict[str, Any]
+        mem_stats: Dict[str, Any],
+        vol_ratio: float = 1.0
     ) -> tuple[int, Dict[str, int], str]:
         """
         Computes composite score (0-100) and rationale.
+        vol_ratio: last bar volume / 14-bar avg — detects volume breakout signals.
         """
         breakdown = {
             "momentum": 0,
@@ -398,7 +405,7 @@ class MarketScreener:
             breakdown["rsi"] = 4
             reasons.append("RSI tiệm cận quá mua")
 
-        # 4. Liquidity & Volume (Max 15 pts)
+        # 4. Liquidity & Volume (Max 15 pts + volume breakout bonus up to +3)
         if quote_volume_m >= 50.0:
             breakdown["liquidity"] = 15
             reasons.append(f"Thanh khoản dồi dào (${quote_volume_m:.0f}M)")
@@ -409,6 +416,15 @@ class MarketScreener:
             breakdown["liquidity"] = 10
         else:
             breakdown["liquidity"] = 5
+
+        # Volume breakout bonus: last candle significantly above average
+        # This detects sudden interest / institutional entry signals
+        if vol_ratio >= 3.0:
+            breakdown["liquidity"] = min(18, breakdown["liquidity"] + 3)
+            reasons.append(f"Volume breakout manh {vol_ratio:.1f}x trung binh")
+        elif vol_ratio >= 2.0:
+            breakdown["liquidity"] = min(18, breakdown["liquidity"] + 2)
+            reasons.append(f"Volume dot bien {vol_ratio:.1f}x")
 
         # 5. Trade Memory Bonus / Penalty (-10 to +10 pts)
         win_rate = mem_stats.get("win_rate", 0.0)

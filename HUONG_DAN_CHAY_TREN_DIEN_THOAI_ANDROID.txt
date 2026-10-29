@@ -121,3 +121,48 @@ BƯỚC 8: DỪNG HOẶC KHỞI ĐỘNG LẠI BOT
   cd ~/kind-pasteur/backend
   python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ================================================================================
+Searched "Failed to determine Android API level" pydantic-core termux
+Searched termux "tur-repo" "python-pydantic" OR "pydantic-core" wheel
+Searched termux "python 3.14" pydantic OR "pydantic-core"
+
+Nhìn vào ảnh màn hình của bạn, nguyên nhân là do Termux đang dùng **Python 3.14 mới nhất**. Khi cài `pydantic-core` (thư viện Rust), trình biên dịch bị chặn lại do thiếu biến môi trường:
+> `Caused by: Failed to determine Android API level. Please set the ANDROID_API_LEVEL environment variable.`
+
+Vì lỗi này làm dừng toàn bộ quá trình cài đặt nên `uvicorn` chưa được nạp vào máy.
+
+---
+
+### Cách xử lý triệt để trong 3 bước:
+
+Sao chép và chạy lần lượt từng dòng lệnh sau trên Termux:
+
+#### Bước 1: Khai báo biến môi trường cho Android
+Dòng này giúp trình biên dịch Rust nhận diện đúng hệ điều hành Android:
+```bash
+export ANDROID_API_LEVEL=24
+```
+
+#### Bước 2: Tải gói `pydantic-core` tối ưu sẵn cho Android
+Để tránh việc điện thoại phải biên dịch mã nguồn Rust mất 15–20 phút, bạn chạy lệnh sau để tải bản biên dịch sẵn:
+```bash
+pip install pydantic-core --extra-index-url https://eutalix.github.io/android-pydantic-core/ --extra-index-url https://termux-user-repository.github.io/pypi/
+```
+
+#### Bước 3: Cài đặt Uvicorn và toàn bộ các thư viện còn lại
+```bash
+pip install uvicorn fastapi pydantic pydantic-settings "sqlalchemy[asyncio]" aiosqlite httpx apscheduler websockets python-multipart
+```
+
+# 1. Cài đặt cryptography bản tối ưu sẵn cho Android (chỉ mất 3 giây):
+pkg install python-cryptography -y
+
+# 2. Đảm bảo có thêm aiosqlite và apscheduler:
+pip install aiosqlite apscheduler websockets
+
+### Bước 4: Khởi động lại Bot
+Sau khi cài xong, bạn gõ lệnh chạy:
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Màn hình sẽ hiện `Uvicorn running on http://127.0.0.1:8000`, lúc này bạn mở trình duyệt Chrome trên điện thoại vào **`http://127.0.0.1:8000`** là xong!

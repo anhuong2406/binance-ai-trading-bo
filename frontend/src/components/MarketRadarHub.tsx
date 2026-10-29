@@ -237,8 +237,13 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
                     </div>
                     <div className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2">
                       <div className="text-gray-400 text-[10px]">Thanh khoản 24h</div>
-                      <div className="font-bold text-white mt-0.5 text-xs">
-                        ${bestPick.quote_volume_m}M
+                      <div className="font-bold text-white mt-0.5 text-xs flex items-center justify-between">
+                        <span>${bestPick.quote_volume_m}M</span>
+                        {bestPick.volume_ratio && bestPick.volume_ratio >= 1.5 && (
+                          <span className="text-[10px] text-amber-400 font-mono ml-1" title={`Volume nến 15m gần nhất gấp ${bestPick.volume_ratio}x trung bình`}>
+                            ⚡{bestPick.volume_ratio}x
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2">
@@ -250,6 +255,32 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Score Breakdown Pills */}
+              {bestPick.score_breakdown && (
+                <div className="mt-3 pt-3 border-t border-gray-800/80 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-gray-400 mr-1">Cơ cấu điểm:</span>
+                  <span className="px-2 py-0.5 rounded bg-gray-800/90 text-gray-300 border border-gray-700/60" title="Xu hướng EMA & Động lượng 24h (Tối đa 30 điểm)">
+                    Xu hướng: <strong className="text-amber-400">+{bestPick.score_breakdown.momentum}</strong>
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-gray-800/90 text-gray-300 border border-gray-700/60" title="Biên độ ATR 15m (Tối đa 25 điểm)">
+                    Biến động: <strong className="text-cyan-400">+{bestPick.score_breakdown.volatility}</strong>
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-gray-800/90 text-gray-300 border border-gray-700/60" title="RSI 14 (Tối đa 20 điểm)">
+                    RSI: <strong className="text-emerald-400">+{bestPick.score_breakdown.rsi}</strong>
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-gray-800/90 text-gray-300 border border-gray-700/60" title="Thanh khoản 24h & Đột biến Volume (Tối đa 18 điểm)">
+                    Thanh khoản: <strong className="text-blue-400">+{bestPick.score_breakdown.liquidity}</strong>
+                  </span>
+                  {bestPick.score_breakdown.trade_memory !== 0 && (
+                    <span className="px-2 py-0.5 rounded bg-gray-800/90 text-gray-300 border border-gray-700/60" title="Thưởng/phạt từ lịch sử giao dịch thực chiến (-10 đến +10)">
+                      Ký ức: <strong className={bestPick.score_breakdown.trade_memory > 0 ? "text-emerald-400" : "text-rose-400"}>
+                        {bestPick.score_breakdown.trade_memory > 0 ? `+${bestPick.score_breakdown.trade_memory}` : bestPick.score_breakdown.trade_memory}
+                      </strong>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -326,7 +357,12 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
                       </td>
 
                       <td className="py-2.5 px-3 text-right text-gray-300 font-medium">
-                        ${cand.quote_volume_m}M
+                        <div>${cand.quote_volume_m}M</div>
+                        {cand.volume_ratio && cand.volume_ratio >= 1.5 && (
+                          <div className="text-[10px] text-amber-400 font-mono" title={`Volume nến 15m gấp ${cand.volume_ratio}x trung bình`}>
+                            ⚡ {cand.volume_ratio}x
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-2.5 px-3 text-right">
@@ -355,7 +391,10 @@ export const MarketRadarHub: React.FC<MarketRadarHubProps> = ({
                         </span>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center">
+                      <td
+                        className="py-2.5 px-3 text-center"
+                        title={cand.score_breakdown ? `Điểm chi tiết: Xu hướng +${cand.score_breakdown.momentum} | Biến động +${cand.score_breakdown.volatility} | RSI +${cand.score_breakdown.rsi} | Dòng tiền +${cand.score_breakdown.liquidity} | Ký ức ${cand.score_breakdown.trade_memory >= 0 ? '+' : ''}${cand.score_breakdown.trade_memory}` : undefined}
+                      >
                         <div className="inline-flex items-center space-x-1.5">
                           <div className="w-12 bg-gray-800 h-1.5 rounded-full overflow-hidden">
                             <div
